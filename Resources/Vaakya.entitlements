@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Hardened Runtime capability: microphone. With the hardened runtime
+	     flag set, mic access is denied BEFORE TCC unless this entitlement is
+	     present (that was the "no mic prompt, no Settings entry" bug — see
+	     reality log R8/R9). Needs no provisioning profile; works with the
+	     self-signed "Vaakya Local Signing" identity. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>
