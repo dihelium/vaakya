@@ -18,10 +18,16 @@ final class FMAdapter: CleanupModel {
 #endif
     }
 
+#if canImport(FoundationModels)
     private let session: LanguageModelSession
+#endif
 
     init(instructions: String = "You are a dictation post-processor.") {
+#if canImport(FoundationModels)
         session = LanguageModelSession(model: .default, instructions: instructions)
+#else
+        _ = instructions
+#endif
     }
 
     func complete(prompt: String) async throws -> String {
