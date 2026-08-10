@@ -11,7 +11,31 @@ if [[ ! -d "$APP" ]]; then
   exit 1
 fi
 
-if rg -n 'Sparkle|SUFeedURL|SUPublicEDKey|Sentry|Telemetry|Analytics' Sources Resources; then
+search_regex() {
+  if command -v rg >/dev/null 2>&1; then
+    rg "$@"
+  else
+    grep -RE "$@"
+  fi
+}
+
+search_fixed() {
+  if command -v rg >/dev/null 2>&1; then
+    rg -F "$@"
+  else
+    grep -RF "$@"
+  fi
+}
+
+search_stream_regex() {
+  if command -v rg >/dev/null 2>&1; then
+    rg "$@"
+  else
+    grep -E "$@"
+  fi
+}
+
+if search_regex -n 'Sparkle|SUFeedURL|SUPublicEDKey|Sentry|Telemetry|Analytics' Sources Resources; then
   echo "error: updater, telemetry, or analytics symbol found" >&2
   exit 1
 fi
@@ -24,16 +48,16 @@ while IFS= read -r source_file; do
       exit 1
       ;;
   esac
-done < <(rg -l 'URLSession|import Network|NWConnection|CFNetwork' Sources || true)
+done < <(search_regex -l 'URLSession|import Network|NWConnection|CFNetwork' Sources || true)
 
 while IFS= read -r process_file; do
   if [[ "$process_file" != "Sources/Vaakya/CodexLensClient.swift" ]]; then
     echo "error: unexpected subprocess capability: $process_file" >&2
     exit 1
   fi
-done < <(rg -l 'Process\(' Sources || true)
+done < <(search_regex -l 'Process\(' Sources || true)
 
-if rg -n -i 'macbook|/Users/' Sources Resources docs; then
+if search_regex -n -i 'macbook|/Users/' Sources Resources docs; then
   echo "error: personal or machine-specific release content found" >&2
   exit 1
 fi
@@ -45,8 +69,8 @@ if [[ "$CONTEXT_FILES" != "Sources/VaakyaCore/Resources/Context/interview_defaul
   exit 1
 fi
 
-if ! rg -q 'var lensEgressEnabled: Bool = false' Sources/Vaakya/Config.swift \
-  || ! rg -q 'var selectedLLMRunner: String = "local"' Sources/Vaakya/Config.swift; then
+if ! search_regex -q 'var lensEgressEnabled: Bool = false' Sources/Vaakya/Config.swift \
+  || ! search_regex -q 'var selectedLLMRunner: String = "local"' Sources/Vaakya/Config.swift; then
   echo "error: safe inference defaults are missing" >&2
   exit 1
 fi
@@ -63,23 +87,23 @@ for invariant in \
   '"memories.generate_memories=false"' \
   '"analytics.enabled=false"' \
   '"--sandbox", "read-only"'; do
-  if ! rg -Fq "$invariant" Sources/Vaakya/CodexLensClient.swift; then
+  if ! search_fixed -q "$invariant" Sources/Vaakya/CodexLensClient.swift; then
     echo "error: Codex safety invariant missing: $invariant" >&2
     exit 1
   fi
 done
 
-if rg -n 'workspace-write|danger-full-access|--full-auto|dangerously-bypass' Sources/Vaakya/CodexLensClient.swift; then
+if search_regex -n 'workspace-write|danger-full-access|--full-auto|dangerously-bypass' Sources/Vaakya/CodexLensClient.swift; then
   echo "error: unsafe Codex execution mode found" >&2
   exit 1
 fi
 
-if rg -n 'security find-identity|VAAKYA_SKIP_INSTALL|/Applications' Scripts/build.sh Scripts/bundle.sh Makefile; then
+if search_regex -n 'security find-identity|VAAKYA_SKIP_INSTALL|/Applications' Scripts/build.sh Scripts/bundle.sh Makefile; then
   echo "error: build must not auto-select identities or install applications" >&2
   exit 1
 fi
 
-if plutil -p "$APP/Contents/Info.plist" | rg -n 'SUFeedURL|SUPublicEDKey'; then
+if plutil -p "$APP/Contents/Info.plist" | search_stream_regex -n 'SUFeedURL|SUPublicEDKey'; then
   echo "error: updater key found in app Info.plist" >&2
   exit 1
 fi
