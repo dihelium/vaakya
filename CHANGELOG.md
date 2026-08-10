@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0
+
+- Added meeting capture, imported audio transcription, offline speaker diarization, transcript editing, lenses, and Archive Ask.
+- Added Local, Codex CLI, and remote inference runners with explicit text-egress consent.
+- Made Local the fresh-install inference default and kept all text egress off by default.
+- Removed personal interview context and replaced bundled normalization examples with generic guidance.
+- Hardened Codex runs with ephemeral mode, ignored user configuration, disabled tools and web search, a read-only sandbox, and no persisted Codex prompt or console log.
+- Added a one-command user install that does not inspect Keychain signing identities or write to `/Applications`.
+
 ## 0.1.1
 
 - Added persisted speech-model consent and cached-model preparation at startup.

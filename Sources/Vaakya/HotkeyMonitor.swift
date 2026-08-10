@@ -1,8 +1,10 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import VaakyaCore
 
 /// CGEvent session event tap for the dictation hotkey (plan §6):
+/// - modifier hotkeys activate only when no other pressed modifier is present
 /// - hold ≥150 ms = record while held (observe-only, modifier not swallowed)
 /// - optional double-tap = latch (record until next tap)
 /// Requires Input Monitoring permission; `preflight` reports it.
@@ -32,6 +34,8 @@ final class HotkeyMonitor: @unchecked Sendable {
     private var isHeld = false
     private var isLatched = false
     private var ignoreNextKeyUp = false
+    private var suppressHotkeyUntilRelease = false
+    private var activeModifierFlags: CGEventFlags = []
     private var lastTapTime: TimeInterval = 0
     private var active = false
 
@@ -110,6 +114,8 @@ final class HotkeyMonitor: @unchecked Sendable {
         isHeld = false
         isLatched = false
         ignoreNextKeyUp = false
+        suppressHotkeyUntilRelease = false
+        activeModifierFlags = []
         lastTapTime = 0 // review fix: stale isHeld/lastTapTime would swallow the first keyDown after a re-arm
         if let eventTap {
             CGEvent.tapEnable(tap: eventTap, enable: false)
@@ -120,6 +126,16 @@ final class HotkeyMonitor: @unchecked Sendable {
         }
         eventTap = nil
         runLoopSource = nil
+        lock.unlock()
+    }
+
+    /// Clears latch bookkeeping when recording ends without another hotkey
+    /// press, for example when the empty-audio safety fallback fires.
+    func cancelLatch() {
+        lock.lock()
+        isLatched = false
+        ignoreNextKeyUp = false
+        lastTapTime = 0
         lock.unlock()
     }
 
@@ -136,7 +152,18 @@ final class HotkeyMonitor: @unchecked Sendable {
     }
 
     private func handle(event: CGEvent) {
-        guard Int(event.getIntegerValueField(.keyboardEventKeycode)) == Int(keyCode) else { return }
+        let eventKeyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+
+        // Modifier hotkeys need every flagsChanged event, not only their own.
+        // This lets Option followed by Command cancel before the hold timer fires.
+        if event.type == .flagsChanged, let hotkeyFlag = Self.modifierFlag(for: keyCode) {
+            handleModifierFlagsChanged(event: event,
+                                       eventKeyCode: eventKeyCode,
+                                       hotkeyFlag: hotkeyFlag)
+            return
+        }
+
+        guard eventKeyCode == keyCode else { return }
         lock.lock()
         defer { lock.unlock() }
         switch event.type {
@@ -144,23 +171,54 @@ final class HotkeyMonitor: @unchecked Sendable {
             handleKeyDown()
         case .keyUp:
             handleKeyUp()
-        case .flagsChanged:
-            // Modifier-only keys (the default Left Option, keyCode 58) deliver
-            // ONLY flagsChanged — without this branch the hotkey can never fire
-            // (review finding #1; explains R7's "hold-Option did nothing").
-            // Press = the modifier's flag became set; release = cleared.
-            // Caveat: the flag reflects either key of that modifier type, so
-            // holding both Option keys confuses press/release — accepted for a
-            // personal app; documented in plan §6.
-            guard let flag = Self.modifierFlag(for: keyCode) else { break }
-            if event.flags.contains(flag) {
-                handleKeyDown()
-            } else {
-                handleKeyUp()
-            }
         default:
             break
         }
+    }
+
+    private func handleModifierFlagsChanged(event: CGEvent,
+                                            eventKeyCode: CGKeyCode,
+                                            hotkeyFlag: CGEventFlags) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        activeModifierFlags = event.flags.intersection(HotkeyModifierPolicy.activationModifiers)
+        let hotkeyIsDown = activeModifierFlags.contains(hotkeyFlag)
+
+        if hotkeyIsDown,
+           !HotkeyModifierPolicy.allowsActivation(activeFlags: activeModifierFlags,
+                                                   hotkeyFlag: hotkeyFlag) {
+            suppressModifiedHotkeyLocked()
+            return
+        }
+
+        // A different modifier may have been released while Option remains down.
+        // A chord that began modified stays suppressed until Option is released.
+        guard eventKeyCode == keyCode else { return }
+
+        if hotkeyIsDown {
+            guard !suppressHotkeyUntilRelease else { return }
+            handleKeyDown()
+        } else if suppressHotkeyUntilRelease {
+            suppressHotkeyUntilRelease = false
+            ignoreNextKeyUp = false
+        } else {
+            handleKeyUp()
+        }
+    }
+
+    /// Caller must hold `lock`.
+    private func suppressModifiedHotkeyLocked() {
+        suppressHotkeyUntilRelease = true
+        holdTimer?.cancel()
+        holdTimer = nil
+        lastTapTime = 0
+
+        guard isHeld else { return }
+        isHeld = false
+        lock.unlock()
+        deliver(.holdEnded)
+        lock.lock()
     }
 
     /// The modifier flag for a modifier key code, or nil for regular keys
@@ -229,7 +287,15 @@ final class HotkeyMonitor: @unchecked Sendable {
             guard let self else { return }
             var began = false
             self.lock.lock()
-            if !self.isHeld {
+            let modifierEligible: Bool
+            if let hotkeyFlag = Self.modifierFlag(for: self.keyCode) {
+                modifierEligible = HotkeyModifierPolicy.allowsActivation(
+                    activeFlags: self.activeModifierFlags,
+                    hotkeyFlag: hotkeyFlag)
+            } else {
+                modifierEligible = true
+            }
+            if !self.isHeld, !self.suppressHotkeyUntilRelease, modifierEligible {
                 self.isHeld = true
                 began = true
             }

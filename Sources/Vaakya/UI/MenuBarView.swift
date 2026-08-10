@@ -1,11 +1,8 @@
+import AppKit
 import SwiftUI
 import VaakyaCore
 
-/// Menu bar menu (plan §7 UI). Panel buttons open AppKit windows via
-/// `WindowManager` (AppKit direct — the SwiftUI `openWindow` route from
-/// MenuBarExtra content did not work; user feedback 2026-08-02).
-/// The status section makes permission gaps and errors visible instead of
-/// silent, so "hold-to-talk does nothing" is actionable.
+/// Menu bar menu. Actions route into the YapYap-style main shell via WindowManager.
 struct MenuBarView: View {
     @Environment(AppEnvironment.self) private var env
 
@@ -14,21 +11,34 @@ struct MenuBarView: View {
             .foregroundStyle(.secondary)
             .onAppear { env.coordinator.refreshPermissions() }
 
-        Divider()
-
         statusSection
 
         Divider()
 
-        Button("History") { WindowManager.shared.open("history") }
-        Button("Dictionary") { WindowManager.shared.open("dictionary") }
-        Button("Onboarding / Permissions") { WindowManager.shared.open("onboarding") }
-        Button("Settings…") { WindowManager.shared.open("settings") }
+        Button("Show Vaakya") {
+            WindowManager.shared.openShell(route: .home)
+        }
+        Button("Transcribe Audio…") {
+            WindowManager.shared.openShell(route: .recordings)
+            AudioImportPanel.chooseAndEnqueue(in: env)
+        }
+        Button("Recordings") {
+            WindowManager.shared.openShell(route: .recordings)
+        }
 
         Divider()
+
+        Button("History") { WindowManager.shared.openShell(route: .history) }
+        Button("Dictionary") { WindowManager.shared.openShell(route: .dictionary) }
+
+        Divider()
+
+        Button("Onboarding / Permissions") { WindowManager.shared.open("onboarding") }
+        Button("Settings…") { WindowManager.shared.openShell(route: .settings) }
         Button("Re-check permissions") {
             env.coordinator.refreshPermissions()
         }
+
         Divider()
         Button("Quit Vaakya") { NSApp.terminate(nil) }
     }
@@ -52,7 +62,17 @@ struct MenuBarView: View {
                 .foregroundStyle(.secondary)
         }
 
-        // Actionable status: what's missing, or the last error.
+        if let error = env.coordinator.state.lastError {
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .lineLimit(3)
+        }
+        if !env.coordinator.hotkeyActive {
+            Text("Hotkey inactive — grant Input Monitoring")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
         if env.coordinator.state.phase == .idle, MicRecorder.micStatus != .granted {
             Text(env.coordinator.micStatusText)
                 .font(.caption)
@@ -63,19 +83,15 @@ struct MenuBarView: View {
             Text(perms)
                 .font(.caption)
                 .foregroundStyle(.orange)
+                .lineLimit(2)
         }
-        if let error = env.coordinator.state.lastError {
-            Text(error)
-                .font(.caption)
-                .foregroundStyle(.red)
-        }
-        if !env.coordinator.hotkeyActive {
-            Text("Hotkey inactive — grant Input Monitoring in Onboarding")
+        if !env.coordinator.state.modelsReady {
+            Text("Speech model not ready — open Onboarding")
                 .font(.caption)
                 .foregroundStyle(.orange)
         }
         if env.coordinator.state.pendingSuggestionCount > 0 {
-            Text("\(env.coordinator.state.pendingSuggestionCount) suggestion(s) pending approval")
+            Text("\(env.coordinator.state.pendingSuggestionCount) suggestion(s) pending in Dictionary")
                 .font(.caption)
                 .foregroundStyle(.orange)
         }

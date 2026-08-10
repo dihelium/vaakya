@@ -11,8 +11,71 @@ if [[ ! -d "$APP" ]]; then
   exit 1
 fi
 
-if rg -n 'URLSession|import Network|NWConnection|CFNetwork|Sparkle|SUFeedURL|SUPublicEDKey' Sources; then
-  echo "error: runtime network or updater symbol found in Sources" >&2
+if rg -n 'Sparkle|SUFeedURL|SUPublicEDKey|Sentry|Telemetry|Analytics' Sources Resources; then
+  echo "error: updater, telemetry, or analytics symbol found" >&2
+  exit 1
+fi
+
+while IFS= read -r source_file; do
+  case "$source_file" in
+    Sources/Vaakya/OpenAILensClient.swift|Sources/Vaakya/ArchiveAskService.swift) ;;
+    *)
+      echo "error: unexpected runtime networking outside the reviewed clients: $source_file" >&2
+      exit 1
+      ;;
+  esac
+done < <(rg -l 'URLSession|import Network|NWConnection|CFNetwork' Sources || true)
+
+while IFS= read -r process_file; do
+  if [[ "$process_file" != "Sources/Vaakya/CodexLensClient.swift" ]]; then
+    echo "error: unexpected subprocess capability: $process_file" >&2
+    exit 1
+  fi
+done < <(rg -l 'Process\(' Sources || true)
+
+if rg -n -i 'macbook|/Users/' Sources Resources docs; then
+  echo "error: personal or machine-specific release content found" >&2
+  exit 1
+fi
+
+CONTEXT_FILES="$(find Sources/VaakyaCore/Resources/Context -type f | sort)"
+if [[ "$CONTEXT_FILES" != "Sources/VaakyaCore/Resources/Context/interview_default.md" ]]; then
+  echo "error: bundled context must contain only the reviewed generic default" >&2
+  echo "$CONTEXT_FILES" >&2
+  exit 1
+fi
+
+if ! rg -q 'var lensEgressEnabled: Bool = false' Sources/Vaakya/Config.swift \
+  || ! rg -q 'var selectedLLMRunner: String = "local"' Sources/Vaakya/Config.swift; then
+  echo "error: safe inference defaults are missing" >&2
+  exit 1
+fi
+
+for invariant in \
+  '"--ephemeral"' \
+  '"--ignore-user-config"' \
+  '"--ignore-rules"' \
+  '"features.shell_tool=false"' \
+  '"features.unified_exec=false"' \
+  '"web_search=\"disabled\""' \
+  '"project_doc_max_bytes=0"' \
+  '"history.persistence=\"none\""' \
+  '"memories.generate_memories=false"' \
+  '"analytics.enabled=false"' \
+  '"--sandbox", "read-only"'; do
+  if ! rg -Fq "$invariant" Sources/Vaakya/CodexLensClient.swift; then
+    echo "error: Codex safety invariant missing: $invariant" >&2
+    exit 1
+  fi
+done
+
+if rg -n 'workspace-write|danger-full-access|--full-auto|dangerously-bypass' Sources/Vaakya/CodexLensClient.swift; then
+  echo "error: unsafe Codex execution mode found" >&2
+  exit 1
+fi
+
+if rg -n 'security find-identity|VAAKYA_SKIP_INSTALL|/Applications' Scripts/build.sh Scripts/bundle.sh Makefile; then
+  echo "error: build must not auto-select identities or install applications" >&2
   exit 1
 fi
 
@@ -40,6 +103,11 @@ fi
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")"
+
+if [[ "$IDENTIFIER" != "io.github.dihelium.vaakya" ]]; then
+  echo "error: unexpected bundle identifier: $IDENTIFIER" >&2
+  exit 1
+fi
 
 echo "release audit OK"
 echo "version: $VERSION"

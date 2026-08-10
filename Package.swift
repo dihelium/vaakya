@@ -17,13 +17,19 @@ let package = Package(
     ],
     targets: [
         // Pure, testable logic. No AppKit, no networking (privacy invariant §2.1).
+        // Lens HTTP clients live in the Vaakya app target, not here.
         .target(
             name: "VaakyaCore",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            resources: [
+                .process("Resources/Lenses"),
+                .process("Resources/Context"),
             ]
         ),
         // Menu-bar app shell: AppKit/SwiftUI, AV, AX, FluidAudio ASR.
+        // Optional lens egress (URLSession) is gated by config + explicit consent.
         .executableTarget(
             name: "Vaakya",
             dependencies: [
@@ -38,7 +44,7 @@ let package = Package(
         ),
         .testTarget(
             name: "VaakyaCoreTests",
-            dependencies: ["VaakyaCore"]
+            dependencies: ["VaakyaCore", "Vaakya"]
         ),
     ]
 )

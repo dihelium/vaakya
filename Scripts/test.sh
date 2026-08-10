@@ -6,8 +6,8 @@
 # search path and runtime rpaths so `swift test` works on this machine.
 # On a machine with Xcode installed, plain `swift test` also works.
 #
-# If your shell blocks SwiftPM's sandbox (sandbox-exec error), run with
-#   SWIFTPM_DISABLE_SANDBOX=1 Scripts/test.sh   (or: make test)
+# If your shell blocks SwiftPM's sandbox, opt out explicitly with
+#   SWIFTPM_DISABLE_SANDBOX=1 Scripts/test.sh
 
 set -euo pipefail
 cd "$(dirname "$0")/.."

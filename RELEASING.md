@@ -42,14 +42,14 @@ Run the test, build, audit, package, notarize, staple, and Gatekeeper checks wit
 ```bash
 VAAKYA_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 VAAKYA_NOTARY_PROFILE="vaakya-notary" \
-Scripts/release.sh 0.1.1
+Scripts/release.sh 0.2.0
 ```
 
 Successful output is written to `dist/`:
 
-- `Vaakya-0.1.1-macOS.dmg`
-- `Vaakya-0.1.1-macOS.zip`
-- `Vaakya-0.1.1-SHA256SUMS.txt`
+- `Vaakya-0.2.0-macOS.dmg`
+- `Vaakya-0.2.0-macOS.zip`
+- `Vaakya-0.2.0-SHA256SUMS.txt`
 
 ## Public repository boundary
 
@@ -71,12 +71,12 @@ If you do not want a personal email in public Git history, configure your GitHub
 From the development checkout:
 
 ```bash
-gh release create v0.1.1 \
-  dist/Vaakya-0.1.1-macOS.dmg \
-  dist/Vaakya-0.1.1-macOS.zip \
-  dist/Vaakya-0.1.1-SHA256SUMS.txt \
+gh release create v0.2.0 \
+  dist/Vaakya-0.2.0-macOS.dmg \
+  dist/Vaakya-0.2.0-macOS.zip \
+  dist/Vaakya-0.2.0-SHA256SUMS.txt \
   --repo OWNER/vaakya \
-  --title "Vaakya 0.1.1" \
+  --title "Vaakya 0.2.0" \
   --generate-notes
 ```
 

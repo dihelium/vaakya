@@ -12,7 +12,7 @@ Bug reports and focused pull requests are welcome.
 
 ## Privacy invariant
 
-Do not add analytics, telemetry, accounts, automatic update checks, or networking to `Sources/`. FluidAudio's explicit-consent model download and the optional Apple Foundation Models path are the documented exceptions at the dependency and operating-system layers.
+Do not add analytics, telemetry, accounts, or automatic update checks. Runtime networking is limited to the reviewed local and remote inference clients in the app target. Remote text egress must remain off by default and require an explicit per-run confirmation. `VaakyaCore` must remain free of networking and AppKit dependencies.
 
 ## Security reports
 

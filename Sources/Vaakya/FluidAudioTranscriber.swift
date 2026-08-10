@@ -1,5 +1,20 @@
 import Foundation
 import FluidAudio
+import VaakyaCore
+
+struct FileASRResult: Codable, Sendable {
+    let text: String
+    let confidence: Float
+    let duration: TimeInterval
+    let processingTime: TimeInterval
+    let tokenTimings: [TokenTiming]
+    let words: [TimedWord]
+}
+
+protocol FileTranscriber: Sendable {
+    func prepare() async throws
+    func transcribeFile(_ url: URL, progressHandler: @escaping @Sendable (Double) -> Void) async throws -> FileASRResult
+}
 
 /// Abstraction over the ASR backend so the rest of the app is insulated from
 /// FluidAudio's API (plan §10.6). All audio is 16 kHz mono Float32.
@@ -18,7 +33,7 @@ protocol Transcriber: Sendable {
 /// Verified against FluidAudio 0.15.5 source:
 /// `AsrModels.downloadAndLoad(version: .v2)` → `AsrManager(config:models:)` +
 /// `loadModels(_:)` + `transcribe(_:decoderState:)`; `VadManager` + `process(_:)`.
-final class FluidAudioTranscriber: Transcriber, @unchecked Sendable {
+final class FluidAudioTranscriber: Transcriber, FileTranscriber, @unchecked Sendable {
     enum TranscriberError: LocalizedError {
         case notReady
         var errorDescription: String? {
@@ -74,5 +89,29 @@ final class FluidAudioTranscriber: Transcriber, @unchecked Sendable {
         var decoderState = TdtDecoderState.make()
         let result = try await manager.transcribe(samples, decoderState: &decoderState)
         return result.text
+    }
+
+    func transcribeFile(_ url: URL, progressHandler: @escaping @Sendable (Double) -> Void) async throws -> FileASRResult {
+        guard ready else { throw TranscriberError.notReady }
+        let progressTask = Task {
+            do {
+                for try await progress in await manager.transcriptionProgressStream {
+                    progressHandler(progress)
+                }
+            } catch {
+                // The transcription call reports the authoritative error.
+            }
+        }
+        defer { progressTask.cancel() }
+        var decoderState = TdtDecoderState.make()
+        let result = try await manager.transcribe(url, decoderState: &decoderState)
+        let timings = result.tokenTimings ?? []
+        let words = buildWordTimings(from: timings).map {
+            TimedWord(text: $0.word, startSeconds: $0.startTime, endSeconds: $0.endTime)
+        }
+        progressHandler(1)
+        return FileASRResult(text: result.text, confidence: result.confidence,
+                             duration: result.duration, processingTime: result.processingTime,
+                             tokenTimings: timings, words: words)
     }
 }

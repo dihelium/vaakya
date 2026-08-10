@@ -4,127 +4,267 @@ import Security
 import SwiftUI
 import VaakyaCore
 
-/// Onboarding: permission checks (mic / accessibility / input monitoring) with
-/// deep links, model-consent (states exactly what downloads, plan 1.4), and the
-/// privacy details for the optional model-backed cleanup pass.
+/// First-run: permissions, speech model consent, and TCC diagnostics.
 struct OnboardingView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     @State private var axGranted = AXIsProcessTrusted()
     @State private var inputGranted = CGPreflightListenEventAccess()
     @State private var isPreparing = false
+    @State private var prepareError: String?
+
+    private var allPermissionsGranted: Bool { micGranted && axGranted && inputGranted }
+    private var modelsReady: Bool { env.coordinator.state.modelsReady }
+    private var isReady: Bool { allPermissionsGranted && modelsReady }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Vaakya — get started").font(.title2.bold())
+        VStack(spacing: 0) {
+            PanelHeader(
+                title: "Welcome to Vaakya",
+                subtitle: "private voice on this Mac — grant permissions, then download the speech model once"
+            )
+            Rectangle().fill(VaakyaSurface.hairline).frame(height: 1)
 
-            PermissionRow(title: "Microphone",
-                          detail: "Used only to capture your dictation. Audio never leaves this Mac.",
-                          granted: micGranted,
-                          settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-                MicRecorder.requestMicPermission { granted in
-                    Task { @MainActor in micGranted = granted }
-                }
-            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: VaakyaSpace.section) {
+                    if isReady {
+                        readyCard
+                    }
 
-            PermissionRow(title: "Accessibility",
-                          detail: "Types text at your cursor and learns from your edits.",
-                          granted: axGranted,
-                          settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-                _ = AXIsProcessTrustedWithOptions(options)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { axGranted = AXIsProcessTrusted() }
-            }
+                    permissionsSection
+                    modelSection
 
-            PermissionRow(title: "Input Monitoring",
-                          detail: "Lets the hotkey (hold Left Option) be seen by Vaakya.",
-                          granted: inputGranted,
-                          settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
-                _ = CGRequestListenEventAccess()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { inputGranted = CGPreflightListenEventAccess() }
-            }
+                    DisclosureGroup("Diagnostics") {
+                        diagnosticsBody
+                            .padding(.top, VaakyaSpace.sm)
+                    }
+                    .font(.subheadline.weight(.medium))
 
-            Divider()
-
-            // Model consent (plan 1.4): one-time ~450 MB Parakeet download from Hugging Face.
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Speech model (one-time download)").font(.headline)
-                Text("On first use, Vaakya downloads the Parakeet TDT 0.6B v2 CoreML model "
-                     + "(~450 MB) from Hugging Face via FluidAudio. After it is cached, the app "
-                     + "works fully offline — nothing else ever leaves your Mac.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text("Optional: an on-device LLM cleanup pass (Stage 2) can be enabled in Settings. "
-                     + "Note it may use Apple's Foundation Models, which can route through Apple's "
-                     + "Private Cloud Compute — it is OFF until you opt in.")
-                    .font(.caption).foregroundStyle(.orange)
-                HStack {
-                    Button(isPreparing ? "Preparing…" : (env.coordinator.state.modelsReady ? "Models ready ✓" : "Download & prepare models")) {
-                        Task {
-                            isPreparing = true
-                            await env.prepareModelsWithConsent()
-                            isPreparing = false
+                    if !isReady {
+                        HStack {
+                            Spacer()
+                            Button("Continue without models") {
+                                env.needsOnboarding = false
+                                WindowManager.shared.close("onboarding")
+                                WindowManager.shared.openMain()
+                            }
+                            .disabled(isPreparing)
+                        }
+                    } else {
+                        HStack {
+                            Spacer()
+                            Button("Open Vaakya") {
+                                env.needsOnboarding = false
+                                WindowManager.shared.close("onboarding")
+                                WindowManager.shared.openMain()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
                         }
                     }
-                    .disabled(isPreparing || env.coordinator.state.modelsReady)
-                    Button("Skip for now") { env.needsOnboarding = false }
-                        .disabled(isPreparing)
+                }
+                .padding(VaakyaSpace.panelInset)
+            }
+        }
+        .frame(minWidth: 560, minHeight: 580)
+        .background(VaakyaSurface.canvas)
+        .tint(YapTheme.coral)
+        .onAppear { refreshPermissions() }
+    }
+
+    // MARK: - Sections
+
+    private var readyCard: some View {
+        HStack(spacing: VaakyaSpace.md) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.title2)
+                .foregroundStyle(.green)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("You’re ready to dictate")
+                    .font(.headline)
+                Text("Hold Left Option to speak into any app.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(VaakyaSpace.xl)
+        .background(SemanticTone.success.color.opacity(0.10), in: RoundedRectangle(cornerRadius: VaakyaRadius.card))
+        .overlay(RoundedRectangle(cornerRadius: VaakyaRadius.card).strokeBorder(VaakyaSurface.hairline, lineWidth: 1))
+    }
+
+    private var permissionsSection: some View {
+        VStack(alignment: .leading, spacing: VaakyaSpace.md) {
+            Text("Permissions")
+                .font(.headline)
+            Text("Vaakya needs these to capture speech, type at the cursor, and see the hotkey.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            permissionCard(
+                title: "Microphone",
+                detail: "Captures dictation only. Audio never leaves this Mac.",
+                granted: micGranted,
+                settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+                request: {
+                    MicRecorder.requestMicPermission { granted in
+                        Task { @MainActor in micGranted = granted }
+                    }
+                }
+            )
+
+            permissionCard(
+                title: "Accessibility",
+                detail: "Types text at your cursor and learns from your edits.",
+                granted: axGranted,
+                settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+                request: {
+                    let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+                    _ = AXIsProcessTrustedWithOptions(options)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                        axGranted = AXIsProcessTrusted()
+                    }
+                }
+            )
+
+            permissionCard(
+                title: "Input Monitoring",
+                detail: "Lets Vaakya see the hold-Left Option hotkey.",
+                granted: inputGranted,
+                settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+                request: {
+                    _ = CGRequestListenEventAccess()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                        inputGranted = CGPreflightListenEventAccess()
+                    }
+                }
+            )
+
+            Button("Re-check permissions") {
+                refreshPermissions()
+                env.coordinator.refreshPermissions()
+            }
+            .font(.caption)
+        }
+    }
+
+    private var modelSection: some View {
+        VStack(alignment: .leading, spacing: VaakyaSpace.md) {
+            Text("Speech model")
+                .font(.headline)
+            Text("One-time ~450 MB download of Parakeet TDT 0.6B v2 (Core ML) from Hugging Face via FluidAudio. After that, recognition works fully offline.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Text("Optional Stage 2 cleanup (Settings) may use Apple Foundation Models / Private Cloud Compute — off until you enable it.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: VaakyaSpace.sm) {
+                if modelsReady {
+                    Badge(title: "Models ready", systemImage: "checkmark.circle.fill", tone: .success)
+                } else if isPreparing {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Preparing…")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button("Download & prepare models") {
+                        Task {
+                            isPreparing = true
+                            prepareError = nil
+                            await env.prepareModelsWithConsent()
+                            isPreparing = false
+                            if !env.coordinator.state.modelsReady {
+                                prepareError = env.coordinator.state.lastError
+                                    ?? "Model preparation didn’t finish. You can retry."
+                            }
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isPreparing)
                 }
             }
 
-            Divider()
-
-            // Diagnostics: helps debug TCC registration (e.g. mic missing from
-            // System Settings) — shows what macOS sees for this app.
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Diagnostics").font(.headline)
-                Text("Bundle: \(Bundle.main.bundleIdentifier ?? "?") · v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text("Signature: \(Self.signingIdentity()) · Team ID: \(Self.teamIdentifier() ?? "none")")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text("Microphone status: \(MicRecorder.micStatus == .granted ? "granted" : MicRecorder.micStatus == .denied ? "denied" : "not asked yet")")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text("If the mic prompt never appears, verify the hardened-runtime audio-input entitlement in the app's code signature.")
-                    .font(.caption).foregroundStyle(.secondary)
+            if let prepareError {
+                FeedbackMessage(text: prepareError, tone: .danger)
             }
-
-            Spacer()
         }
-        .padding(20)
-        .frame(width: 520, height: 520)
+        .padding(VaakyaSpace.xl)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(VaakyaSurface.card, in: RoundedRectangle(cornerRadius: VaakyaRadius.card))
+        .overlay(RoundedRectangle(cornerRadius: VaakyaRadius.card).strokeBorder(VaakyaSurface.hairline, lineWidth: 1))
     }
-}
 
-private struct PermissionRow: View {
-    let title: String
-    let detail: String
-    let granted: Bool
-    let settingsURL: String
-    let request: () -> Void
+    private var diagnosticsBody: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Bundle: \(Bundle.main.bundleIdentifier ?? "?") · v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?")")
+            Text("Signature: \(Self.signingIdentity()) · Team ID: \(Self.teamIdentifier() ?? "none")")
+            Text("Microphone status: \(MicRecorder.micStatus == .granted ? "granted" : MicRecorder.micStatus == .denied ? "denied" : "not asked yet")")
+            Text("If the mic prompt never appears, verify the audio-input entitlement on a properly signed build.")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .textSelection(.enabled)
+    }
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: granted ? "checkmark.circle.fill" : "xmark.circle")
-                .foregroundStyle(granted ? .green : .red)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
-                Text(detail).font(.caption).foregroundStyle(.secondary)
+    private func permissionCard(
+        title: String,
+        detail: String,
+        granted: Bool,
+        settingsURL: String,
+        request: @escaping () -> Void
+    ) -> some View {
+        HStack(alignment: .top, spacing: VaakyaSpace.md) {
+            Image(systemName: granted ? "checkmark.circle.fill" : "circle.dashed")
+                .font(.title3)
+                .foregroundStyle(granted ? SemanticTone.success.color : Color.secondary)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text(title).font(.body.weight(.semibold))
+                    if granted {
+                        Badge(title: "Granted", tone: .success)
+                    }
+                }
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
-            if granted {
-                Text("Granted").font(.caption).foregroundStyle(.green)
-            } else {
-                Button("Grant", action: request)
-                Button("Settings", action: {
-                    if let url = URL(string: settingsURL) { NSWorkspace.shared.open(url) }
-                })
+
+            Spacer(minLength: VaakyaSpace.sm)
+
+            if !granted {
+                HStack(spacing: VaakyaSpace.sm) {
+                    Button("Grant", action: request)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    Button("Settings") {
+                        if let url = URL(string: settingsURL) {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .controlSize(.small)
+                }
             }
         }
+        .padding(VaakyaSpace.xl)
+        .background(VaakyaSurface.card, in: RoundedRectangle(cornerRadius: VaakyaRadius.card))
+        .overlay(RoundedRectangle(cornerRadius: VaakyaRadius.card).strokeBorder(VaakyaSurface.hairline, lineWidth: 1))
+        .accessibilityElement(children: .contain)
+    }
+
+    private func refreshPermissions() {
+        micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        axGranted = AXIsProcessTrusted()
+        inputGranted = CGPreflightListenEventAccess()
     }
 }
 
 private extension OnboardingView {
-    /// Signing identity as seen by the code-signing API — the key diagnostic
-    /// for TCC not registering the app (self-signed ⇒ Team ID "none").
     static func signingIdentity() -> String {
         let url = Bundle.main.bundleURL as CFURL
         var code: SecStaticCode?

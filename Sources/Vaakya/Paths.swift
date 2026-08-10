@@ -21,8 +21,30 @@ enum Paths {
         appSupport.appendingPathComponent("config.json")
     }
 
+    static var transcriptionJobsDirectory: URL {
+        appSupport.appendingPathComponent("transcription-jobs", isDirectory: true)
+    }
+
+    static func jobDirectory(jobID: String) -> URL {
+        transcriptionJobsDirectory.appendingPathComponent(jobID, isDirectory: true)
+    }
+
+    static func jobLensesDirectory(jobID: String) -> URL {
+        jobDirectory(jobID: jobID).appendingPathComponent("lenses", isDirectory: true)
+    }
+
     static func ensureAppSupport() throws {
         try FileManager.default.createDirectory(at: appSupport,
+                                                withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: transcriptionJobsDirectory,
+                                                withIntermediateDirectories: true)
+    }
+
+    static func ensureJobDirectories(jobID: String) throws {
+        try ensureAppSupport()
+        try FileManager.default.createDirectory(at: jobDirectory(jobID: jobID),
+                                                withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: jobLensesDirectory(jobID: jobID),
                                                 withIntermediateDirectories: true)
     }
 }

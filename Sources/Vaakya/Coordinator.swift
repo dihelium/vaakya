@@ -46,6 +46,11 @@ final class Stage2Gate: @unchecked Sendable {
 /// → TextInjector → EditWatcher. Also owns onboarding-triggered prep.
 @MainActor
 final class Coordinator {
+    private enum RecordingMode {
+        case hold
+        case latched
+    }
+
     let state = AppState()
     let db: VaakyaDatabase
     private let pipeline: PersonalizationPipeline
@@ -54,6 +59,8 @@ final class Coordinator {
     private let transcriber: any Transcriber
     private let injector: TextInjector
     private var cleanupModel: (any CleanupModel)?
+    private var activeRecordingMode: RecordingMode?
+    private var meetingCaptureOwnsMicrophone = false
     /// Live stage-2 toggle (Settings); the pipeline reads this on every dictation.
     /// A Sendable box so the pipeline's @Sendable closure can read it.
     let stage2Gate = Stage2Gate(enabled: true)
@@ -89,7 +96,7 @@ final class Coordinator {
         pipeline = PersonalizationPipeline(db: db) { [weak stage2Gate] in
             stage2Gate?.value ?? false
         }
-        recorder = MicRecorder(maxHoldSeconds: config.maxHoldSeconds)
+        recorder = MicRecorder(emptyAudioTimeoutSeconds: config.emptyAudioTimeoutSeconds)
         injector = TextInjector(method: TextInjector.InjectionMethod(rawValue: config.injectionMethod) ?? .auto)
         hotkey = HotkeyMonitor(keyCode: config.hotkeyKeyCode, doubleTapEnabled: config.doubleTapEnabled)
     }
@@ -128,8 +135,10 @@ final class Coordinator {
 
     private func handle(gesture: HotkeyMonitor.Gesture) {
         switch gesture {
-        case .holdBegan, .doubleTapBegan:
-            beginRecording()
+        case .holdBegan:
+            beginRecording(mode: .hold)
+        case .doubleTapBegan:
+            beginRecording(mode: .latched)
         case .holdEnded, .latchEnded:
             // If a mic-permission prompt is up, the release must cancel the
             // pending recording start (review fix: no ambient capture without
@@ -164,7 +173,11 @@ final class Coordinator {
         refreshBadge()
     }
 
-    private func beginRecording() {
+    private func beginRecording(mode: RecordingMode) {
+        guard !meetingCaptureOwnsMicrophone else {
+            state.lastError = "Meeting notes is using the microphone. Stop the meeting before dictating."
+            return
+        }
         guard state.phase == .idle else { return }
         guard state.modelsReady else {
             state.lastError = "Speech models are not ready yet — complete onboarding or wait for startup loading."
@@ -180,13 +193,13 @@ final class Coordinator {
         case .granted:
             break
         case .undetermined:
-            requestMicAndRecord()
+            requestMicAndRecord(mode: mode)
             return
         case .denied:
             state.lastError = "Microphone permission denied — enable it in System Settings."
             return
         }
-        beginRecordingAfterPermissions()
+        beginRecordingAfterPermissions(mode: mode)
     }
 
     /// Fires the TCC prompt once per session (review fix: serialized, and the
@@ -194,7 +207,7 @@ final class Coordinator {
     private var micRequestInFlight = false
     private var micPromptStillHeld = false
 
-    private func requestMicAndRecord() {
+    private func requestMicAndRecord(mode: RecordingMode) {
         guard !micRequestInFlight else { return }
         micRequestInFlight = true
         micPromptStillHeld = true
@@ -207,7 +220,7 @@ final class Coordinator {
                 self.micPromptStillHeld = false
                 if granted {
                     if wasStillHeld {
-                        self.beginRecordingAfterPermissions()
+                        self.beginRecordingAfterPermissions(mode: mode)
                     } else {
                         self.state.lastError = "Microphone granted — hold Option again to record."
                     }
@@ -218,7 +231,7 @@ final class Coordinator {
         }
     }
 
-    private func beginRecordingAfterPermissions() {
+    private func beginRecordingAfterPermissions(mode: RecordingMode) {
         guard state.phase == .idle else { return }
         guard TextInjector.hasAccessibilityPermission() else {
             state.lastError = "Accessibility permission missing — needed to type at your cursor."
@@ -226,7 +239,18 @@ final class Coordinator {
         }
         state.lastError = nil
         do {
-            try recorder.start()
+            let timeoutHandler: (@Sendable () -> Void)?
+            if mode == .latched {
+                timeoutHandler = { [weak self] in
+                    _ = Task { @MainActor [weak self] in
+                        self?.emptyAudioTimedOut()
+                    }
+                }
+            } else {
+                timeoutHandler = nil
+            }
+            try recorder.start(onEmptyAudioTimeout: timeoutHandler)
+            activeRecordingMode = mode
             state.phase = .recording
             FloatingIndicator.shared.show(state: state)
         } catch {
@@ -236,12 +260,19 @@ final class Coordinator {
 
     private func endRecording() {
         guard state.phase == .recording else { return }
+        activeRecordingMode = nil
         let samples = recorder.stop()
         state.phase = .transcribing
         FloatingIndicator.shared.show(state: state)
         Task {
             await transcribeAndInject(samples)
         }
+    }
+
+    private func emptyAudioTimedOut() {
+        guard state.phase == .recording, activeRecordingMode == .latched else { return }
+        hotkey.cancelLatch()
+        endRecording()
     }
 
     private func transcribeAndInject(_ samples: [Float]) async {
@@ -276,6 +307,23 @@ final class Coordinator {
     }
 
     // MARK: - helpers
+
+    /// Serializes the shared microphone between long meeting capture and the
+    /// short hotkey path. Main-actor isolation makes the reservation atomic
+    /// with respect to hotkey gesture handling.
+    func reserveMicrophoneForMeeting() -> Bool {
+        guard !meetingCaptureOwnsMicrophone,
+              !micRequestInFlight,
+              state.phase == .idle else { return false }
+        hotkey.cancelLatch()
+        meetingCaptureOwnsMicrophone = true
+        state.lastError = nil
+        return true
+    }
+
+    func releaseMicrophoneFromMeeting() {
+        meetingCaptureOwnsMicrophone = false
+    }
 
     func refreshBadge() {
         state.pendingSuggestionCount = (try? db.pendingSuggestionCount()) ?? 0

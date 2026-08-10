@@ -7,6 +7,10 @@ import VaakyaCore
 @MainActor
 @Observable
 final class AppEnvironment {
+    private final class ConsentBox {
+        var value: Bool
+        init(_ value: Bool) { self.value = value }
+    }
     /// Created exactly once, on the main actor, at first access (avoids the
     /// scene-body-vs-didFinishLaunching race). Views inject this directly.
     struct StartupResult {
@@ -25,12 +29,18 @@ final class AppEnvironment {
     let db: VaakyaDatabase
     var config: AppConfig
     let coordinator: Coordinator
+    let transcriptionRunner: AudioTranscriptionJobRunner
+    let meetingCapture: MeetingCaptureController
+    let lensService: LensService
+    let askService: ArchiveAskService
+    private let consentBox: ConsentBox
     var needsOnboarding: Bool
 
     init() throws {
         try Paths.ensureAppSupport()
         let db = try VaakyaDatabase(path: Paths.dbURL.path)
         let config = AppConfig.load()
+        let consentBox = ConsentBox(config.diarizationModelConsentGiven)
 
         let transcriber: any Transcriber = FluidAudioTranscriber()
         var cleanup: (any CleanupModel)?
@@ -40,9 +50,21 @@ final class AppEnvironment {
         let coordinator = Coordinator(config: config, db: db,
                                       transcriber: transcriber,
                                       cleanupModel: cleanup)
+        let fileTranscriber = FluidAudioTranscriber()
+        let diarizer = FluidAudioOfflineDiarizer()
         self.db = db
         self.config = config
         self.coordinator = coordinator
+        let transcriptionRunner = AudioTranscriptionJobRunner(
+            db: db, asr: fileTranscriber, diarizer: diarizer,
+            diarizationConsent: { consentBox.value })
+        self.transcriptionRunner = transcriptionRunner
+        self.meetingCapture = MeetingCaptureController(coordinator: coordinator,
+                                                       runner: transcriptionRunner)
+        // Always read live config so Settings toggles apply without restart.
+        self.lensService = LensService(db: db, config: { AppConfig.load() })
+        self.askService = ArchiveAskService(db: db, config: { AppConfig.load() })
+        self.consentBox = consentBox
         needsOnboarding = !config.modelConsentGiven
     }
 
@@ -68,5 +90,12 @@ final class AppEnvironment {
         }
         needsOnboarding = false
         await coordinator.prepareModels()
+    }
+
+    func grantDiarizationConsent() {
+        config.diarizationModelConsentGiven = true
+        consentBox.value = true
+        do { try config.save() }
+        catch { coordinator.state.lastError = "Diarization consent couldn't be saved: \(error.localizedDescription)" }
     }
 }

@@ -1,11 +1,8 @@
 #!/bin/bash
 # Assemble Vaakya.app from a SwiftPM binary.
 #
-# Signing priority:
-# 1. VAAKYA_CODESIGN_IDENTITY
-# 2. A Developer ID Application identity
-# 3. The stable Vaakya Local Signing identity
-# 4. Ad-hoc signing for development only
+# Signing is ad-hoc by default. A signing identity is used only when the caller
+# explicitly supplies VAAKYA_CODESIGN_IDENTITY.
 
 set -euo pipefail
 
@@ -51,18 +48,7 @@ else
   echo "note: Resources/vaakya.icns is not present. Bundling without a custom icon."
 fi
 
-IDENTITY="${VAAKYA_CODESIGN_IDENTITY:-}"
-if [[ -z "$IDENTITY" ]]; then
-  IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
-    | awk -F'"' '/Developer ID Application:/{print $2; exit}')"
-fi
-if [[ -z "$IDENTITY" ]]; then
-  IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
-    | awk -F'"' '/Vaakya Local Signing/{print $2; exit}')"
-fi
-if [[ -z "$IDENTITY" ]]; then
-  IDENTITY="-"
-fi
+IDENTITY="${VAAKYA_CODESIGN_IDENTITY:--}"
 
 SIGN_ARGS=(
   --force

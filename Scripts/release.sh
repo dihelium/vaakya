@@ -25,8 +25,8 @@ if [[ "$PLIST_VERSION" != "$EXPECTED_VERSION" ]]; then
   exit 1
 fi
 
-SWIFTPM_DISABLE_SANDBOX=1 make test
-SWIFTPM_DISABLE_SANDBOX=1 Scripts/build.sh --release
+make test
+Scripts/build.sh --release
 Scripts/audit-release.sh
 
 APP="build/Vaakya.app"

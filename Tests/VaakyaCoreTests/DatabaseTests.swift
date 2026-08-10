@@ -13,9 +13,86 @@ import Testing
                 SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name
                 """)
         }
-        for expected in ["dictations", "dictionary_entries", "replacement_rules", "corrections"] {
+        for expected in ["dictations", "dictionary_entries", "replacement_rules", "corrections",
+                         "transcription_jobs", "transcript_speakers", "transcript_turns", "lens_runs",
+                         "ask_conversations", "ask_messages"] {
             #expect(tables.contains(expected), "missing table \(expected); got \(tables)")
         }
+    }
+
+    @Test func askConversationCascadeAndSeq() throws {
+        let db = try makeDB()
+        let now = "2026-08-09T00:00:00Z"
+        try db.insertAskConversation(AskConversationRecord(
+            id: "c1", title: "hello", scopeJSON: "{}", createdAt: now, updatedAt: now))
+        try db.insertAskMessage(AskMessageRecord(
+            id: "m1", conversationID: "c1", role: "user", content: "hi",
+            createdAt: now, seq: 1))
+        try db.insertAskMessage(AskMessageRecord(
+            id: "m2", conversationID: "c1", role: "assistant", content: "yo",
+            status: "complete", createdAt: now, seq: 2))
+        #expect(try db.askMessages(conversationID: "c1").count == 2)
+        #expect(try db.nextAskMessageSeq(conversationID: "c1") == 3)
+        try db.deleteAskConversation(id: "c1")
+        #expect(try db.askMessages(conversationID: "c1").isEmpty)
+    }
+
+    @Test func importedJobStateAndRecoveryAreDurable() throws {
+        let db = try makeDB()
+        let job = TranscriptionJobRecord(
+            id: "job-1",
+            sourceName: "interview.m4a",
+            managedAudioPath: "TranscriptionJobs/job-1/source.m4a",
+            sourceSHA256: "abc",
+            fileSizeBytes: 123,
+            durationSeconds: 12.5,
+            createdAt: "t0",
+            updatedAt: "t0")
+        try db.insertTranscriptionJob(job)
+        try db.updateTranscriptionJobState(
+            id: "job-1",
+            status: "running",
+            activeStage: "diarizing",
+            completedStage: "asr",
+            progress: 0.4,
+            updatedAt: "t1")
+
+        #expect(try db.transcriptionJob(id: "job-1")?.status == "running")
+        #expect(try db.recoverInterruptedTranscriptionJobs(updatedAt: "t2") == 1)
+        let recovered = try #require(try db.transcriptionJob(id: "job-1"))
+        #expect(recovered.status == "queued")
+        #expect(recovered.activeStage == "diarizing")
+        #expect(recovered.completedStage == "asr")
+        #expect(recovered.progress == 0.4)
+    }
+
+    @Test func replacingTranscriptIsIdempotentAndDeleteCascades() throws {
+        let db = try makeDB()
+        let job = TranscriptionJobRecord(
+            id: "job-2",
+            sourceName: "interview.wav",
+            managedAudioPath: "TranscriptionJobs/job-2/source.wav",
+            sourceSHA256: "def",
+            fileSizeBytes: 456,
+            durationSeconds: 3,
+            createdAt: "t0",
+            updatedAt: "t0")
+        try db.insertTranscriptionJob(job)
+        let speakers = [TranscriptSpeakerRecord(jobID: "job-2", speakerKey: "S1",
+                                                 displayName: "Interviewer", sortOrder: 0)]
+        let turns = [TranscriptTurn(ordinal: 0, speakerKey: "S1", startSeconds: 0,
+                                    endSeconds: 1, rawText: "Hello", finalText: "Hello")]
+
+        try db.replaceTranscript(jobID: "job-2", speakers: speakers, turns: turns)
+        try db.replaceTranscript(jobID: "job-2", speakers: speakers, turns: turns)
+        #expect(try db.transcriptSpeakers(jobID: "job-2").count == 1)
+        #expect(try db.transcriptTurns(jobID: "job-2").count == 1)
+        #expect(try db.transcriptTurns(jobID: "job-2")[0].asTurn == turns[0])
+
+        try db.deleteTranscriptionJob(id: "job-2")
+        #expect(try db.transcriptionJob(id: "job-2") == nil)
+        #expect(try db.transcriptSpeakers(jobID: "job-2").isEmpty)
+        #expect(try db.transcriptTurns(jobID: "job-2").isEmpty)
     }
 
     @Test func insertAndFetchDictation() throws {

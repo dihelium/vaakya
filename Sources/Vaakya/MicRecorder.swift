@@ -3,8 +3,9 @@ import Foundation
 import VaakyaCore
 
 /// Records from the default input device via AVAudioEngine and produces
-/// 16 kHz mono Float32 samples (plan 1.3). Hard cap at `maxHoldSeconds`.
-final class MicRecorder {
+/// 16 kHz mono Float32 samples (plan 1.3). Latched recording has no duration
+/// cap. Its optional watchdog fires only after sustained empty audio.
+final class MicRecorder: @unchecked Sendable {
     enum RecorderError: LocalizedError {
         case noInput
         case alreadyRecording
@@ -21,11 +22,15 @@ final class MicRecorder {
     private let engine = AVAudioEngine()
     private var samples: [Float] = []
     private let lock = NSLock()
-    private let maxSamples: Int
+    private let emptyAudioTimeoutSeconds: TimeInterval
+    private let watchdogQueue = DispatchQueue(label: "vaakya.mic.empty-audio-watchdog")
+    private var emptyAudioWatchdog: EmptyAudioWatchdog?
+    private var emptyAudioTimer: DispatchSourceTimer?
+    private var emptyAudioTimeoutHandler: (@Sendable () -> Void)?
     private var recording = false
 
-    init(maxHoldSeconds: Double = 90) {
-        maxSamples = Int(16_000 * maxHoldSeconds)
+    init(emptyAudioTimeoutSeconds: TimeInterval = 90) {
+        self.emptyAudioTimeoutSeconds = emptyAudioTimeoutSeconds
     }
 
     /// Microphone permission state (modern API, macOS 14+).
@@ -59,7 +64,9 @@ final class MicRecorder {
         return recording
     }
 
-    func start() throws {
+    /// Starts recording. Supplying an empty-audio handler enables the inactivity
+    /// fallback used by latch mode. A nil handler leaves recording release-driven.
+    func start(onEmptyAudioTimeout: (@Sendable () -> Void)? = nil) throws {
         lock.lock()
         let already = recording
         lock.unlock()
@@ -86,33 +93,101 @@ final class MicRecorder {
             // Append under the lock, re-checking the flag: a callback that started
             // before stop() must not append after stop() returned the samples
             // (review fix — no check-then-act, no tail drop).
+            let now = ProcessInfo.processInfo.systemUptime
             self.lock.lock()
-            if self.recording && self.samples.count < self.maxSamples {
+            if self.recording {
                 self.samples.append(contentsOf: converted)
+                if var watchdog = self.emptyAudioWatchdog {
+                    watchdog.observe(samples: converted, at: now)
+                    self.emptyAudioWatchdog = watchdog
+                }
             }
             self.lock.unlock()
         }
 
         engine.prepare()
-        try engine.start()
+        do {
+            try engine.start()
+        } catch {
+            input.removeTap(onBus: 0)
+            throw error
+        }
         // Set the flag only after the engine is actually running (review fix:
         // if start() throws, the recorder must not wedge as 'already recording').
         lock.lock()
         recording = true
+        if onEmptyAudioTimeout != nil, emptyAudioTimeoutSeconds > 0 {
+            emptyAudioWatchdog = EmptyAudioWatchdog(
+                timeoutSeconds: emptyAudioTimeoutSeconds,
+                startedAt: ProcessInfo.processInfo.systemUptime)
+            emptyAudioTimeoutHandler = onEmptyAudioTimeout
+        }
         lock.unlock()
+        startEmptyAudioTimerIfNeeded()
     }
 
     func stop() -> [Float] {
         lock.lock()
         let wasRecording = recording
         recording = false
+        let timer = emptyAudioTimer
+        emptyAudioTimer = nil
+        emptyAudioWatchdog = nil
+        emptyAudioTimeoutHandler = nil
         lock.unlock()
+        timer?.cancel()
         guard wasRecording else { return [] }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         lock.lock()
         defer { lock.unlock() }
         return samples
+    }
+
+    private func startEmptyAudioTimerIfNeeded() {
+        lock.lock()
+        let shouldStart = recording && emptyAudioWatchdog != nil
+        lock.unlock()
+        guard shouldStart else { return }
+
+        let timer = DispatchSource.makeTimerSource(queue: watchdogQueue)
+        let checkInterval = min(1.0, max(0.05, emptyAudioTimeoutSeconds / 10))
+        timer.schedule(deadline: .now() + emptyAudioTimeoutSeconds,
+                       repeating: checkInterval,
+                       leeway: .milliseconds(100))
+        timer.setEventHandler { [weak self] in
+            self?.checkEmptyAudioTimeout()
+        }
+
+        lock.lock()
+        guard recording, emptyAudioWatchdog != nil else {
+            lock.unlock()
+            timer.resume()
+            timer.cancel()
+            return
+        }
+        emptyAudioTimer = timer
+        lock.unlock()
+        timer.resume()
+    }
+
+    private func checkEmptyAudioTimeout() {
+        lock.lock()
+        guard recording,
+              let watchdog = emptyAudioWatchdog,
+              watchdog.hasTimedOut(at: ProcessInfo.processInfo.systemUptime) else {
+            lock.unlock()
+            return
+        }
+        // Clear before invoking so the periodic timer can deliver at most once.
+        let timer = emptyAudioTimer
+        let handler = emptyAudioTimeoutHandler
+        emptyAudioTimer = nil
+        emptyAudioTimeoutHandler = nil
+        emptyAudioWatchdog = nil
+        lock.unlock()
+        timer?.cancel()
+        handler?()
     }
 
     private func float32Samples(from buffer: AVAudioPCMBuffer) -> [Float] {

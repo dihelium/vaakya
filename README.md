@@ -5,15 +5,19 @@
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-111111.svg)](https://www.apple.com/macos/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Vaakya is a private, personalized dictation app for Apple Silicon Macs. Hold Left Option, speak, and release to type the transcript at the current cursor. Vaakya learns names and vocabulary from approved corrections and writing samples.
+Vaakya is a private, personalized voice workspace for Apple Silicon Macs. Hold Left Option to dictate into any app, or start meeting notes to capture your microphone and Mac audio. Recordings run through local Parakeet ASR with speaker diarization and produce **lens** drafts such as interview notes, decisions, and actions, with optional opt-in cloud APIs. Vaakya learns names and vocabulary from approved corrections and writing samples.
 
 This is a public preview built as a production-minded native macOS project: a pure tested core, explicit privacy boundaries, local SQLite persistence, permission-aware AppKit integration, and a reproducible signing and notarization pipeline.
 
 ## Highlights
 
 - Local Parakeet speech recognition through FluidAudio
-- Hold-to-talk and double-tap latch modes
+- Local meeting capture with microphone and system audio through ScreenCaptureKit
+- Hold-to-talk and double-tap latch modes (menu-bar dictation)
 - Text injection into the active app
+- Imported-file transcription with offline speaker diarization
+- **Lenses** — re-runnable insight templates (interview notes, self-debrief, decisions, actions) on a completed transcript
+- Optional cloud lens API (text only; audio never uploaded; off by default)
 - A correction engine that preserves case, punctuation, and phrase boundaries
 - Suggested rules that stay pending until you approve them
 - Local history, dictionary, and JSON export
@@ -24,19 +28,25 @@ This is a public preview built as a production-minded native macOS project: a pu
 - Apple Silicon Mac
 - macOS 14 or later
 - About 450 MB for the one-time speech model download
-- Microphone, Accessibility, and Input Monitoring permissions
+- Microphone, Screen and System Audio Recording, Accessibility, and Input Monitoring permissions
 
-## Install
+## Fast install from source
 
-Download the latest `.dmg` or `.zip` from [GitHub Releases](../../releases/latest).
+You need an Apple Silicon Mac running macOS 14 or later and Xcode Command Line Tools. This single command clones, builds, installs to `~/Applications/Vaakya.app`, and opens the app:
 
-For the DMG, open it and drag Vaakya into Applications. For the ZIP, unzip it and move `Vaakya.app` into Applications. Launch Vaakya, grant the three requested permissions, then approve the speech model download.
+```bash
+git clone https://github.com/dihelium/vaakya.git && cd vaakya && make install
+```
 
-The first download is handled by FluidAudio from Hugging Face. Later launches load the cached model from disk.
+`make install` keeps SwiftPM's sandbox enabled, uses an ad-hoc app signature, and does not inspect signing identities in your Keychain. It never writes to `/Applications`. If it replaces an earlier user install, it keeps a timestamped backup beside the app.
+
+On first launch, grant Microphone, Accessibility, and Input Monitoring. Grant Screen and System Audio Recording only if you use meeting notes. Then approve the one-time speech model download. FluidAudio handles the download from Hugging Face and later launches use the cached model.
+
+There is no Developer ID signed public binary yet. The source install is the shortest current path. If Xcode Command Line Tools are missing, run `xcode-select --install` once, finish Apple's installer, and repeat the command above.
 
 ## Use
 
-1. Hold Left Option.
+1. Hold Left Option by itself.
 2. Speak.
 3. Release Left Option.
 4. Vaakya transcribes locally and types at the cursor.
@@ -44,6 +54,45 @@ The first download is handled by FluidAudio from Hugging Face. Later launches lo
 The menu bar shows recording and transcription state. Double-tap Left Option to latch recording, then press it once to stop.
 
 The pending-suggestions badge is independent of Stage 2. Stage 2 cleans punctuation and casing. Suggestions are possible replacement rules learned from edits, and they remain pending until approved or rejected in Dictionary.
+
+### Meeting notes
+
+1. Open Vaakya and choose **start meeting notes**.
+2. Grant Microphone and Screen & System Audio Recording access. macOS may ask you to reopen Vaakya after the first Screen Recording grant.
+3. Keep your call in its normal app. Vaakya listens to your microphone and Mac audio without joining the meeting.
+4. Choose **stop and make notes**. Vaakya creates a local recording job, then runs transcription and speaker diarization after the meeting stops.
+
+There are no live partials and no meeting bot. The recording stays under Vaakya's Application Support directory and audio is never uploaded.
+
+### Transcripts and lenses
+
+1. Menu bar → **Transcribe Audio…** (or **Transcripts**) and import an `.m4a` / `.wav` / etc.
+2. Wait until the job is **completed** (local Parakeet + diarization).
+3. Open the job: rename speakers, edit **Notes** and **Context**.
+4. In **Settings → Lenses (AI runners)**, keep the default **Local** runner or choose **Codex** or **Remote**. Enable **AI text egress** only for Codex or Remote.
+5. Run a lens (e.g. Technical interview notes). Confirm when prompted for B1 runners.
+6. Review the draft; **Mark reviewed** / **Mark final** when you trust it.
+
+### Archive Ask
+
+From the home screen, choose **ask archive**. Ask natural-language questions over completed recordings (decisions, who said what, what is still open). Answers are **drafts** grounded in a budgeted pack of notes + transcript turns with validated `[S#]` citations.
+
+- **Local** runner may search the whole archive (loopback only).
+- **Codex / Remote** require you to **pin** recordings (`+ add`) and confirm text egress.
+
+**Retrieval roadmap:** v1 uses keyword + recency packing (no vector index). Next: chunk transcripts + SQLite FTS5 (see Engineering Atlas ADR-0002 patterns). Later: optional local embeddings / hybrid rank.
+
+The Dock shows **Vaakya** as a normal app. The menu-bar icon still provides hotkey status and quick actions.
+
+Raw transcript copy (L0) is always local. Other lenses require a configured AI runner (Local, or Codex/Remote with opt-in).
+
+### Safe Codex setup on a work Mac
+
+Use a company-approved Codex installation and sign in with the work account your employer permits. Vaakya does not bundle a Codex account, credentials, configuration, skills, plugins, or session history.
+
+For each Codex run, Vaakya shows which recordings are included and asks for confirmation. It sends transcript text, notes, context, and the question over stdin. Audio and audio paths are not included. The subprocess is ephemeral and ignores user config and rules. Shell tools, project instructions, agents, web search, history, memories, analytics, and startup update checks are disabled for that run. The command sandbox is read-only.
+
+Codex is still a cloud text-egress path. Your organization's Codex retention and workspace policies still apply. Use Local if transcript text must stay on the Mac.
 
 ## Build from source
 
@@ -55,7 +104,7 @@ make build
 open build/Vaakya.app
 ```
 
-`make build` produces a release build. It uses a Developer ID identity when available, then a local development identity, and finally an ad-hoc signature. Only a Developer ID signed and notarized build is suitable for frictionless public distribution.
+`make build` produces an ad-hoc signed release build at `build/Vaakya.app`. It does not install the app, stop a running app, or use identities from the Keychain. Set `VAAKYA_CODESIGN_IDENTITY` explicitly only when preparing a controlled signed release.
 
 Other useful commands:
 
@@ -76,13 +125,16 @@ Optional Stage 2 uses Apple Foundation Models and is off by default. Apple may r
 
 - `~/Library/Application Support/Vaakya/vaakya.db`
 - `~/Library/Application Support/Vaakya/config.json`
+- `~/Library/Application Support/Vaakya/transcription-jobs/`
 - `~/Library/Application Support/FluidAudio/Models/`
 
 Export the dictionary from Settings before moving to a new Mac.
 
+For a clean work-laptop install, clone this repository and run `make install`. Do not copy `~/Library/Application Support/Vaakya/`, a personal dictionary export, Keychain entries, or `~/.codex/` from another Mac. Those locations can contain transcripts, recordings, learned names, API settings, and account state. A source clone or public release artifact contains none of them.
+
 ## Architecture
 
-The package has a pure `VaakyaCore` library for learning and persistence, a SwiftUI/AppKit menu-bar app, and an offline evaluation executable. Runtime networking is not implemented in Vaakya source. FluidAudio owns the consent-gated model download.
+The package has a pure `VaakyaCore` library for learning and persistence, a SwiftUI/AppKit app, and an offline evaluation executable. The app target contains reviewed network clients for a loopback local runner and the opt-in HTTPS remote runner. Codex runs as a separately installed subprocess. FluidAudio owns the consent-gated model download.
 
 ```mermaid
 flowchart LR
@@ -94,12 +146,15 @@ flowchart LR
     Inject --> Watch[Accessibility edit watcher]
     Watch --> DB[(GRDB and SQLite)]
     DB --> Rules
+    DB --> Lens[Lenses and Archive Ask]
+    Lens --> Local[Local loopback runner]
+    Lens --> Cloud[Opt-in Codex or Remote text egress]
 ```
 
 ### Engineering details
 
 - `VaakyaCore` contains alignment, replacement, cleanup guards, persistence, export, and writing-sample seeding with no AppKit dependency.
-- The test suite currently covers 82 cases across 8 suites using Swift Testing.
+- The test suite currently covers 113 cases across 14 suites, including the Codex execution safety contract, using Swift Testing.
 - Modifier-only hotkeys are handled through `flagsChanged`, not key-down events.
 - Passive learning arms only after injected text lands, then diffs once at the end of a bounded Accessibility window.
 - Conflicting corrections remain suggestions until the user selects one.
@@ -108,6 +163,6 @@ flowchart LR
 
 ## Project status
 
-The complete hold-to-talk, local transcription, text injection, model caching, history, dictionary, and correction-learning loop has been manually validated on Apple Silicon. The repository is ready for public source distribution. Public binary releases are intentionally withheld until they can be Developer ID signed and notarized.
+The repository includes hold-to-talk dictation, meeting capture, imported audio transcription, speaker diarization, transcript editing, lenses, Archive Ask, history, dictionary, and correction learning. Public binary releases are intentionally withheld until they can be Developer ID signed and notarized.
 
 Third-party software and model attribution is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
