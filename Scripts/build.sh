@@ -18,10 +18,9 @@ case "$CONFIG" in
 esac
 MODE="$CONFIG"
 
-EXTRA=()
 if [[ "${SWIFTPM_DISABLE_SANDBOX:-0}" == "1" ]]; then
-  EXTRA+=(--disable-sandbox)
+  swift build -c "$MODE" --disable-sandbox
+else
+  swift build -c "$MODE"
 fi
-
-swift build -c "$MODE" "${EXTRA[@]}"
 Scripts/bundle.sh "$CONFIG"
