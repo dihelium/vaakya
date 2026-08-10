@@ -6,26 +6,31 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>Vaakya</string>
+	<key>CFBundleIconFile</key>
+	<string>vaakya</string>
+	<key>CFBundleIconName</key>
+	<string>vaakya</string>
 	<key>CFBundleIdentifier</key>
-	<string>local.vaakya.app</string>
+	<string>io.github.dihelium.vaakya.worksafe</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Vaakya</string>
+	<string>Vaakya Work Safe</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.1</string>
+	<string>0.2.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
+	<false/>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>Vaakya Work Safe uses Accessibility only to type the local transcript at your cursor.</string>
+	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Vaakya uses the microphone to transcribe your dictation. Audio never leaves this Mac.</string>
-	<key>NSAccessibilityUsageDescription</key>
-	<string>Vaakya uses Accessibility to type text at your cursor and to learn from your edits. This data is stored locally.</string>
-	<!-- Deliberately no SU* (Sparkle) keys — privacy invariant §2.2. -->
+	<string>Vaakya Work Safe uses the microphone only while you hold Left Option for dictation. Audio stays in memory and is not saved.</string>
 </dict>
 </plist>

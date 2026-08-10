@@ -1,15 +1,8 @@
 import AppKit
 import SwiftUI
-import VaakyaCore
 
-/// Vaakya is a private, personalized menu-bar dictation app.
-///
-/// The menu bar is the single scene; all utility panels (History, Dictionary,
-/// Settings, Onboarding) open as AppKit windows via `WindowManager` — the
-/// SwiftUI `openWindow` route from MenuBarExtra content was unreliable
-/// (user feedback 2026-08-02: buttons did nothing).
 @main
-struct VaakyaApp: App {
+struct VaakyaWorkSafeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
@@ -22,23 +15,21 @@ struct VaakyaApp: App {
         .menuBarExtraStyle(.menu)
     }
 
-    /// Startup failure is unrecoverable (data dir unwritable / DB corrupt):
-    /// fail loudly with the cause rather than running half-broken.
     private static func requireEnvironment() -> AppEnvironment {
-        guard let env = AppEnvironment.startup.environment else {
-            fatalError("Vaakya couldn't start: \(AppEnvironment.startup.error?.localizedDescription ?? "unknown error")")
+        guard let environment = AppEnvironment.startup.environment else {
+            fatalError("Vaakya could not start: \(AppEnvironment.startup.error?.localizedDescription ?? "unknown error")")
         }
-        return env
+        return environment
     }
 }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(.regular)
         if let error = AppEnvironment.startup.error {
             let alert = NSAlert()
-            alert.messageText = "Vaakya couldn't start"
+            alert.messageText = "Vaakya could not start"
             alert.informativeText = error.localizedDescription
             alert.runModal()
             NSApp.terminate(nil)
@@ -47,14 +38,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let environment = AppEnvironment.startup.environment else { return }
         environment.coordinator.start()
         if environment.needsOnboarding {
-            WindowManager.shared.open("onboarding")
+            WindowManager.shared.openOnboarding()
         } else {
-            // Consent was persisted on a prior launch. Preparing here loads
-            // FluidAudio's cached models. It adds no network path to Vaakya.
-            Task { @MainActor in
-                await environment.coordinator.prepareModels()
-            }
+            WindowManager.shared.openMain()
+            Task { await environment.coordinator.prepareModels() }
         }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if AppEnvironment.startup.environment?.needsOnboarding == true {
+            WindowManager.shared.openOnboarding()
+        } else {
+            WindowManager.shared.openMain()
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        return true
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
     }
 
     func applicationWillTerminate(_ notification: Notification) {

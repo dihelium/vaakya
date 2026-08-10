@@ -1,38 +1,33 @@
-# Privacy
+# Privacy - Work Safe branch
 
-Vaakya is local-first dictation software. This document separates the default dictation path from optional features that can use a network service.
+This branch implements only hold-to-dictate with local speech recognition.
 
-## Stored on this Mac
+## Data handling
 
-Vaakya stores these items in `~/Library/Application Support/Vaakya/`:
+- Microphone samples stay in memory for one dictation and are discarded immediately afterward.
+- Recognized text is typed directly at the cursor and is not persisted by Vaakya.
+- Vaakya does not read the target application's text, watch subsequent edits, or access the clipboard.
+- No audio, transcript, history database, recording job, lens output, prompt, or log is created.
+- The sole Vaakya state file is `~/Library/Application Support/Vaakya Work Safe/config.json`, containing only speech-model consent. Its directory and file modes are set to `0700` and `0600`.
 
-- Dictation text and timestamps
-- Dictionary terms and replacement rules
-- Corrections used for personalization
-- App settings and model-download consent
-
-Microphone samples are processed in memory and are not saved as audio recordings by the app.
-
-Speech and voice-activity models are cached by FluidAudio in `~/Library/Application Support/FluidAudio/Models/`.
+FluidAudio caches the separately downloaded speech model under `~/Library/Application Support/FluidAudio/Models/`.
 
 ## Network behavior
 
-The default speech path has one network event: after explicit consent, FluidAudio downloads the Parakeet TDT 0.6B v2 CoreML model from Hugging Face. Once cached, speech recognition runs locally.
+After explicit consent, FluidAudio downloads Parakeet TDT 0.6B v2 from Hugging Face. Once cached, dictation runs locally.
 
-Vaakya source does not implement analytics, telemetry, advertising, accounts, crash upload, an automatic updater, or general-purpose runtime networking.
-
-Optional Stage 2 is off by default. It uses Apple Foundation Models for punctuation and casing cleanup. Depending on the Mac and Apple's availability policy, Apple may route a request through Private Cloud Compute. Do not enable Stage 2 if you require a strictly offline workflow.
+Vaakya itself has no HTTP client, remote runner, Codex subprocess, analytics, telemetry, account, crash upload, advertising, or automatic updater. It does not use Apple Foundation Models or Private Cloud Compute.
 
 ## Permissions
 
-- Microphone records speech while dictation is active.
-- Accessibility types the transcript and observes edits during the short learning window.
-- Input Monitoring detects the Left Option hotkey.
+- Microphone captures only while Left Option is actively held.
+- Accessibility types Unicode at the cursor. It does not inspect UI contents.
+- Input Monitoring observes modifier-change events only for the Left Option hotkey.
 
-Vaakya does not use these permissions for keystroke logging or background audio capture.
+The app has no Screen and System Audio Recording feature.
 
-## Export and deletion
+## Deletion
 
-Settings can export dictionary terms and rules as JSON. Dictation history is not included in that export.
+Quit Vaakya, then delete `~/Library/Application Support/Vaakya Work Safe/`. Remove the FluidAudio model cache separately if desired.
 
-To remove local data, quit Vaakya and delete `~/Library/Application Support/Vaakya/`. The separately cached speech model can be removed from `~/Library/Application Support/FluidAudio/Models/`.
+On an employer-owned Mac, administrators and device-management software may still access local memory, files, processes, or injected text.

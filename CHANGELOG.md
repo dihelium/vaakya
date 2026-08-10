@@ -1,14 +1,10 @@
 # Changelog
 
-## 0.1.1
+## 0.2.0 - Work Safe branch
 
-- Added persisted speech-model consent and cached-model preparation at startup.
-- Fixed modifier-only hotkey handling.
-- Fixed correction learning crashes for empty and imbalanced token sequences.
-- Fixed Accessibility edit-window baseline timing.
-- Fixed latch stop behavior and Settings persistence.
-- Preserved punctuation in phrase replacement and made conflicts reviewable.
-- Preserved the full clipboard during paste fallback.
-- Added the recording and transcription indicator.
-- Fixed indicator label clipping and menu spacing.
-- Added public release packaging, notarization, privacy, and CI infrastructure.
+- Reduced Vaakya to local, hold-only dictation.
+- Removed meetings, imports, stored history, passive learning, lenses, Archive Ask, remote runners, Codex execution, Foundation Models, and clipboard fallback.
+- Restricted the event tap to modifier-change events.
+- Made signing identity use explicit and installation user-scoped.
+- Enabled SwiftPM sandboxing by default.
+- Added a work-safe release audit and a separate bundle identifier.

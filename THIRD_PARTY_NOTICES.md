@@ -9,13 +9,6 @@ Vaakya uses the following projects and model. Release bundles include copies of 
 - License: Apache License 2.0
 - Source: https://github.com/FluidInference/FluidAudio
 
-## GRDB.swift
-
-- Project: GRDB.swift
-- Copyright: 2015-2025 Gwendal Roue
-- License: MIT License
-- Source: https://github.com/groue/GRDB.swift
-
 ## Parakeet TDT 0.6B v2 CoreML
 
 - Model: Parakeet TDT 0.6B v2

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Verify a built bundle and the project's runtime privacy invariants.
+# Verify the work-safe bundle and its narrow privacy invariants.
 
 set -euo pipefail
 
@@ -11,8 +11,18 @@ if [[ ! -d "$APP" ]]; then
   exit 1
 fi
 
-if rg -n 'URLSession|import Network|NWConnection|CFNetwork|Sparkle|SUFeedURL|SUPublicEDKey' Sources; then
-  echo "error: runtime network or updater symbol found in Sources" >&2
+if rg -n 'URLSession|import Network|NWConnection|CFNetwork|ScreenCaptureKit|SCStream|FoundationModels|LanguageModelSession|GRDB|SQLite|NSPasteboard|Process\(' Sources Package.swift; then
+  echo "error: forbidden work-safe capability found" >&2
+  exit 1
+fi
+
+if find Sources/Vaakya Sources/VaakyaCore Sources/vaakya-eval -type f 2>/dev/null | rg .; then
+  echo "error: full-product source directories are present in the work-safe tree" >&2
+  exit 1
+fi
+
+if find Sources -type f \( -name '*.md' -o -name '*.json' \) | rg .; then
+  echo "error: context or data resource found in Sources" >&2
   exit 1
 fi
 
@@ -41,7 +51,12 @@ fi
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")"
 
-echo "release audit OK"
+if [[ "$IDENTIFIER" != "io.github.dihelium.vaakya.worksafe" ]]; then
+  echo "error: unexpected work-safe bundle identifier: $IDENTIFIER" >&2
+  exit 1
+fi
+
+echo "work-safe audit OK"
 echo "version: $VERSION"
 echo "bundle identifier: $IDENTIFIER"
 file "$APP/Contents/MacOS/Vaakya"
