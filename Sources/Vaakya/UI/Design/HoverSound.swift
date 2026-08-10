@@ -2,31 +2,10 @@ import AppKit
 import Foundation
 import SwiftUI
 
-/// Single short click for settings hover — fires on every hover enter.
+/// Single short click for settings hover, played on the AppKit main actor.
+@MainActor
 enum HoverSound {
-    private final class Retainer: @unchecked Sendable {
-        private let lock = NSLock()
-        private var live: [NSSound] = []
-
-        func play(_ sound: NSSound) {
-            lock.lock()
-            live.append(sound)
-            // Cap retained sounds to avoid unbounded growth.
-            if live.count > 8 {
-                live.removeFirst(live.count - 8)
-            }
-            lock.unlock()
-            sound.play()
-            // Drop after a short delay (Tink is < 1s).
-            DispatchQueue.global().asyncAfter(deadline: .now() + 1.2) { [weak self] in
-                self?.lock.lock()
-                self?.live.removeAll { $0 === sound }
-                self?.lock.unlock()
-            }
-        }
-    }
-
-    private static let retainer = Retainer()
+    private static let click = makeClick()
 
     private static func makeClick() -> NSSound? {
         let path = "/System/Library/Sounds/Tink.aiff"
@@ -42,8 +21,7 @@ enum HoverSound {
     }
 
     static func playClick() {
-        guard let sound = makeClick() else { return }
-        retainer.play(sound)
+        click?.play()
     }
 
     static func playSoftDrum() { playClick() }
