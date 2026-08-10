@@ -1,6 +1,6 @@
 import Foundation
 
-/// Loads bundled lens Markdown from `VaakyaCore` resources.
+/// Loads lens Markdown from the app bundle or the source tree during tests.
 public enum LensCatalog {
     public static func systemTrust() throws -> String {
         try loadResource(named: "_system_trust", subdirectory: nil)
@@ -55,9 +55,20 @@ public enum LensCatalog {
     }
 
     private static func loadResource(named name: String, subdirectory: String?) throws -> String? {
-        let url = Bundle.module.url(forResource: name, withExtension: "md", subdirectory: subdirectory)
-            ?? Bundle.module.url(forResource: name, withExtension: "md")
+        let url = Bundle.main.url(forResource: name, withExtension: "md", subdirectory: subdirectory)
+            ?? sourceResourceURL(named: name, subdirectory: subdirectory)
         guard let url else { return nil }
         return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    private static func sourceResourceURL(named name: String, subdirectory: String?) -> URL? {
+        var url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+            .appendingPathComponent("Sources/VaakyaCore/Resources", isDirectory: true)
+        if let subdirectory {
+            url.appendPathComponent(subdirectory, isDirectory: true)
+        }
+        url.appendPathComponent(name)
+        url.appendPathExtension("md")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 }

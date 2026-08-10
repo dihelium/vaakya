@@ -55,7 +55,10 @@ xcrun stapler validate "$DMG"
 
 spctl --assess --type execute --verbose=4 "$APP"
 spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG"
-shasum -a 256 "$DMG" "$ZIP" > "$CHECKSUMS"
+(
+  cd dist
+  shasum -a 256 "$(basename "$DMG")" "$(basename "$ZIP")"
+) > "$CHECKSUMS"
 
 echo "public release gate passed"
 echo "artifacts are in dist/"

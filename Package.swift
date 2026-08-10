@@ -23,10 +23,10 @@ let package = Package(
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
-            resources: [
-                .process("Resources/Lenses"),
-                .process("Resources/Context"),
-            ]
+            // The app bundler copies these files into Contents/Resources.
+            // Keeping them out of SwiftPM resource bundles prevents its generated
+            // development fallback from embedding the build machine's path.
+            exclude: ["Resources"]
         ),
         // Menu-bar app shell: AppKit/SwiftUI, AV, AX, FluidAudio ASR.
         // Optional lens egress (URLSession) is gated by config + explicit consent.

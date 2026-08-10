@@ -34,6 +34,8 @@ cp "$BIN" "$MACOS/Vaakya"
 cp Resources/Info.plist "$CONTENTS/Info.plist"
 cp LICENSE "$RESOURCES/LICENSE.txt"
 cp THIRD_PARTY_NOTICES.md "$RESOURCES/THIRD_PARTY_NOTICES.md"
+cp -R Sources/VaakyaCore/Resources/Lenses "$RESOURCES/Lenses"
+cp -R Sources/VaakyaCore/Resources/Context "$RESOURCES/Context"
 
 if [[ -f .build/checkouts/FluidAudio/LICENSE ]]; then
   cp .build/checkouts/FluidAudio/LICENSE "$RESOURCES/ThirdPartyLicenses/FluidAudio-Apache-2.0.txt"
@@ -66,8 +68,8 @@ fi
 codesign "${SIGN_ARGS[@]}" "$APP_DIR"
 
 if [[ "$IDENTITY" == "-" ]]; then
-  echo "warning: no signing identity found. The app is ad-hoc signed."
-  echo "         Gatekeeper will block public distribution and TCC grants may reset."
+  echo "warning: the app is ad-hoc signed and not notarized."
+  echo "         Downloaded copies require manual Gatekeeper approval, and TCC grants may reset."
 else
   echo "signed $APP_DIR with identity: $IDENTITY"
 fi

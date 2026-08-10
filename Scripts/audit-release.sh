@@ -57,7 +57,7 @@ while IFS= read -r process_file; do
   fi
 done < <(search_regex -l 'Process\(' Sources || true)
 
-if search_regex -n -i 'macbook|/Users/' Sources Resources docs; then
+if search_regex -n -i 'bhargav|pure storage|macbook|/Users/' Sources Resources docs; then
   echo "error: personal or machine-specific release content found" >&2
   exit 1
 fi
@@ -102,6 +102,44 @@ if search_regex -n 'security find-identity|VAAKYA_SKIP_INSTALL|/Applications' Sc
   echo "error: build must not auto-select identities or install applications" >&2
   exit 1
 fi
+
+if search_regex -n 'notarytool|VAAKYA_NOTARY_PROFILE|security find-identity' Scripts/release-community.sh; then
+  echo "error: community release must not use Apple signing or notarization credentials" >&2
+  exit 1
+fi
+if ! search_fixed -q 'VAAKYA_CODESIGN_IDENTITY=-' Scripts/release-community.sh; then
+  echo "error: community release must explicitly select ad-hoc signing" >&2
+  exit 1
+fi
+
+if strings "$APP/Contents/MacOS/Vaakya" | search_stream_regex -n -i 'bhargav|pure storage|macbook|/Users/'; then
+  echo "error: personal or machine-specific content found in release executable" >&2
+  exit 1
+fi
+
+if search_regex -n -i 'pure storage|macbook|/Users/' "$APP/Contents/Resources"; then
+  echo "error: personal or machine-specific content found in release resources" >&2
+  exit 1
+fi
+
+while IFS= read -r bundled_text; do
+  if [[ "$bundled_text" == "$APP/Contents/Resources/LICENSE.txt" ]]; then
+    continue
+  fi
+  if search_regex -n -i 'bhargav' "$bundled_text"; then
+    echo "error: personal name found outside the required license attribution" >&2
+    exit 1
+  fi
+done < <(find "$APP/Contents/Resources" -type f | sort)
+
+while IFS= read -r source_resource; do
+  relative_resource="${source_resource#Sources/VaakyaCore/Resources/}"
+  bundled_resource="$APP/Contents/Resources/$relative_resource"
+  if [[ ! -f "$bundled_resource" ]] || ! cmp -s "$source_resource" "$bundled_resource"; then
+    echo "error: bundled lens resource is missing or changed: $relative_resource" >&2
+    exit 1
+  fi
+done < <(find Sources/VaakyaCore/Resources -type f | sort)
 
 if plutil -p "$APP/Contents/Info.plist" | search_stream_regex -n 'SUFeedURL|SUPublicEDKey'; then
   echo "error: updater key found in app Info.plist" >&2

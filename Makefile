@@ -1,7 +1,7 @@
 # Vaakya standard entry points.
 # `make build` only creates build/Vaakya.app. Installation is explicit.
 
-.PHONY: build test bundle install package audit clean
+.PHONY: build test bundle install package audit community-release clean
 
 build:
 	Scripts/build.sh
@@ -20,6 +20,10 @@ package: build
 
 audit: build
 	Scripts/audit-release.sh
+
+community-release:
+	@test -n "$(VERSION)" || (echo "usage: make community-release VERSION=0.2.0" >&2; exit 2)
+	Scripts/release-community.sh "$(VERSION)"
 
 clean:
 	swift package clean

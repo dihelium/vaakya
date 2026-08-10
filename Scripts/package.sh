@@ -39,7 +39,10 @@ if [[ "$APP_AUTHORITY" == Developer\ ID\ Application:* ]]; then
   codesign --force --sign "$APP_AUTHORITY" --timestamp "$DMG"
 fi
 
-shasum -a 256 "$DMG" "$ZIP" > "$CHECKSUMS"
+(
+  cd dist
+  shasum -a 256 "$(basename "$DMG")" "$(basename "$ZIP")"
+) > "$CHECKSUMS"
 
 echo "created: $DMG"
 echo "created: $ZIP"

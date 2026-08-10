@@ -8,6 +8,7 @@
 - Removed personal interview context and replaced bundled normalization examples with generic guidance.
 - Hardened Codex runs with ephemeral mode, ignored user configuration, disabled tools and web search, a read-only sandbox, and no persisted Codex prompt or console log.
 - Added a one-command user install that does not inspect Keychain signing identities or write to `/Applications`.
+- Added no-cost, ad-hoc-signed GitHub release artifacts with checksums and explicit first-launch instructions.
 
 ## 0.1.1
 
