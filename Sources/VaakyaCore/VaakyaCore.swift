@@ -4,5 +4,5 @@
 /// - No networking in this target. Ever.
 /// - No AppKit/SwiftUI imports — this target is platform-light and unit-tested.
 public enum VaakyaCore {
-    public static let version = "0.2.0"
+    public static let version = "0.3.0"
 }

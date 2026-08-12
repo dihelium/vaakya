@@ -19,7 +19,22 @@ final class LensService {
     }
 
     func availableLenses() throws -> [LensSpec] {
-        try LensCatalog.allSpecs()
+        try Paths.ensureCustomLensesDirectory()
+        return try LensCatalog.allSpecs(userDirectory: Paths.customLensesDirectory)
+    }
+
+    func customStore() throws -> CustomLensStore {
+        try Paths.ensureCustomLensesDirectory()
+        return CustomLensStore(directory: Paths.customLensesDirectory)
+    }
+
+    @discardableResult
+    func saveCustomLens(id: String? = nil, title: String, body: String) throws -> LensSpec {
+        try customStore().save(id: id, title: title, body: body)
+    }
+
+    func deleteCustomLens(id: String) throws {
+        try customStore().delete(id: id)
     }
 
     func notesURL(jobID: String) -> URL {
@@ -81,7 +96,7 @@ final class LensService {
         guard let job = try db.transcriptionJob(id: jobID), job.status == "completed" else {
             throw OpenAILensError.jobNotCompleted
         }
-        let lens = try LensCatalog.loadSpec(id: lensID)
+        let lens = try LensCatalog.loadSpec(id: lensID, userDirectory: Paths.customLensesDirectory)
         try ensureSidecarFiles(jobID: jobID)
 
         let transcript = try buildTranscriptMarkdown(jobID: jobID)

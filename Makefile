@@ -22,7 +22,7 @@ audit: build
 	Scripts/audit-release.sh
 
 community-release:
-	@test -n "$(VERSION)" || (echo "usage: make community-release VERSION=0.2.0" >&2; exit 2)
+	@test -n "$(VERSION)" || (echo "usage: make community-release VERSION=0.3.0" >&2; exit 2)
 	Scripts/release-community.sh "$(VERSION)"
 
 clean:

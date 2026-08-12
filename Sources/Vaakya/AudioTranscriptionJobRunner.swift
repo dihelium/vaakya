@@ -78,7 +78,8 @@ final class AudioTranscriptionJobRunner {
         let job = TranscriptionJobRecord(id: id.uuidString, sourceName: sourceName,
                                          managedAudioPath: relative, sourceSHA256: managed.sha256,
                                          fileSizeBytes: managed.fileSizeBytes, durationSeconds: managed.durationSeconds,
-                                         expectedSpeakerCount: nil, createdAt: now, updatedAt: now)
+                                         expectedSpeakerCount: nil, createdAt: now, updatedAt: now,
+                                         asrModel: asr.modelID)
         do {
             try db.insertTranscriptionJob(job)
         } catch {
@@ -145,7 +146,8 @@ final class AudioTranscriptionJobRunner {
         let job = TranscriptionJobRecord(id: id.uuidString, sourceName: sourceName ?? managed.sourceName,
                                          managedAudioPath: relative, sourceSHA256: managed.sha256,
                                          fileSizeBytes: managed.fileSizeBytes, durationSeconds: managed.durationSeconds,
-                                         expectedSpeakerCount: expectedSpeakerCount, createdAt: now, updatedAt: now)
+                                         expectedSpeakerCount: expectedSpeakerCount, createdAt: now, updatedAt: now,
+                                         asrModel: asr.modelID)
         try db.insertTranscriptionJob(job)
         return id.uuidString
     }

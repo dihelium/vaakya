@@ -116,6 +116,10 @@ struct YapHomeView: View {
                 router.go(.meeting)
             }
 
+            Text("transcribes with \(SpeechRecognitionProfile.shared.displayName) — same as dictation")
+                .font(.system(size: 13))
+                .foregroundStyle(Color.primary.opacity(0.38))
+
             HStack(spacing: 22) {
                 metaChip(systemImage: "mic.fill", text: deviceMicLabel)
                 Text("·")

@@ -42,7 +42,10 @@ final class AppEnvironment {
         let config = AppConfig.load()
         let consentBox = ConsentBox(config.diarizationModelConsentGiven)
 
-        let transcriber: any Transcriber = FluidAudioTranscriber()
+        // Separate AsrManager instances (dictation can overlap an import),
+        // but both are constructed from the same Parakeet profile.
+        let speechProfile = SpeechRecognitionProfile.shared
+        let transcriber = FluidAudioTranscriber(profile: speechProfile)
         var cleanup: (any CleanupModel)?
         if #available(macOS 26.0, *), FMAdapter.isAvailable {
             cleanup = FMAdapter()
@@ -50,7 +53,7 @@ final class AppEnvironment {
         let coordinator = Coordinator(config: config, db: db,
                                       transcriber: transcriber,
                                       cleanupModel: cleanup)
-        let fileTranscriber = FluidAudioTranscriber()
+        let fileTranscriber = FluidAudioTranscriber(profile: speechProfile)
         let diarizer = FluidAudioOfflineDiarizer()
         self.db = db
         self.config = config

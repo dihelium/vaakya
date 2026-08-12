@@ -34,6 +34,7 @@ struct TranscriptDetailView: View {
     @State private var showCodexConsole = false
     /// One-shot extra context entered on the run confirmation sheet.
     @State private var runExtraContext = ""
+    @State private var editorMode: CustomLensEditorSheet.Mode?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -96,6 +97,20 @@ struct TranscriptDetailView: View {
                 showCodexConsole = false
             }
         }
+        .sheet(item: $editorMode) { mode in
+            CustomLensEditorSheet(
+                mode: mode,
+                onSave: { id, title, body in
+                    try env.lensService.saveCustomLens(id: id, title: title, body: body)
+                },
+                onCancel: { editorMode = nil },
+                onSaved: { spec in
+                    loadLensesAndSidecars()
+                    editorMode = nil
+                    statusMessage = "Saved \(spec.title). Run it from the list."
+                }
+            )
+        }
     }
 
     // MARK: - Header
@@ -119,6 +134,8 @@ struct TranscriptDetailView: View {
                     if !lensRuns.isEmpty {
                         Badge(title: "\(lensRuns.count) draft(s)", systemImage: "doc.text", tone: .info)
                     }
+                    Badge(title: SpeechRecognitionProfile.displayName(for: job.asrModel),
+                          systemImage: "waveform", tone: .neutral)
                 }
             }
             Spacer(minLength: VaakyaSpace.sm)
@@ -302,6 +319,18 @@ struct TranscriptDetailView: View {
                 }
                 if runningLensID != nil {
                     ProgressView().controlSize(.small)
+                }
+                if job?.status == "completed" {
+                    Button {
+                        editorMode = .create
+                    } label: {
+                        Label("New lens", systemImage: "plus")
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Write a custom prompt for this and future transcripts")
+                    .disabled(runningLensID != nil)
                 }
             }
             .padding(.horizontal, VaakyaSpace.lg)
@@ -584,14 +613,15 @@ struct TranscriptDetailView: View {
         if let run = latestRun(for: lens.id) {
             return "Last: \(run.status) v\(run.version) · \(run.via) — tap to re-run"
         }
+        let origin = lens.isCustom ? "Custom · " : ""
         if lens.requiresLLM {
             switch env.config.runnerKind {
-            case .codex: return "Not run yet · AI via Codex CLI (opt-in)"
-            case .local: return "Not run yet · AI via local model"
-            case .remote: return "Not run yet · AI via remote API (opt-in)"
+            case .codex: return "\(origin)Not run yet · AI via Codex CLI (opt-in)"
+            case .local: return "\(origin)Not run yet · AI via local model"
+            case .remote: return "\(origin)Not run yet · AI via remote API (opt-in)"
             }
         }
-        return "Not run yet · Local — copy transcript"
+        return "\(origin)Not run yet · Local — copy transcript"
     }
 
     @ViewBuilder
@@ -763,8 +793,8 @@ struct TranscriptDetailView: View {
 
     private func processingLabel(_ job: TranscriptionJobRecord) -> String {
         switch job.activeStage {
-        case "preparingASR": return "Loading speech model"
-        case "transcribing": return "Transcribing audio"
+        case "preparingASR": return "Loading \(SpeechRecognitionProfile.displayName(for: job.asrModel))"
+        case "transcribing": return "Transcribing with \(SpeechRecognitionProfile.displayName(for: job.asrModel))"
         case "preparingDiarizer": return "Loading speaker model"
         case "diarizing": return "Identifying speakers"
         case "aligning": return "Building transcript"
@@ -775,7 +805,7 @@ struct TranscriptDetailView: View {
     private func metadata(_ job: TranscriptionJobRecord) -> String {
         let duration = timestamp(job.durationSeconds)
         let megabytes = Double(job.fileSizeBytes) / 1_048_576
-        return "\(duration) · \(String(format: "%.1f MB", megabytes)) · \(job.status.capitalized)"
+        return "\(duration) · \(String(format: "%.1f MB", megabytes)) · \(SpeechRecognitionProfile.displayName(for: job.asrModel))"
     }
 
     private func timestamp(_ seconds: Double) -> String {

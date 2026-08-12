@@ -11,12 +11,12 @@ This is a public preview built as a production-minded native macOS project: a pu
 
 ## Highlights
 
-- Local Parakeet speech recognition through FluidAudio
+- Local Parakeet TDT v2 speech recognition through FluidAudio, shared by dictation, meetings, and imported audio
 - Local meeting capture with microphone and system audio through ScreenCaptureKit
 - Hold-to-talk and double-tap latch modes (menu-bar dictation)
 - Text injection into the active app
 - Imported-file transcription with offline speaker diarization
-- **Lenses** — re-runnable insight templates (interview notes, self-debrief, decisions, actions) on a completed transcript
+- **Lenses** — bundled insight templates plus custom Markdown prompts you write after transcription
 - Optional cloud lens API (text only; audio never uploaded; off by default)
 - A correction engine that preserves case, punctuation, and phrase boundaries
 - Suggested rules that stay pending until you approve them
@@ -47,7 +47,7 @@ This is [Apple's documented override](https://support.apple.com/en-au/guide/mac-
 The release includes SHA-256 checksums. Verification is optional but recommended:
 
 ```bash
-shasum -a 256 -c Vaakya-0.2.0-SHA256SUMS.txt
+shasum -a 256 -c Vaakya-0.3.0-SHA256SUMS.txt
 ```
 
 ### From source
@@ -80,7 +80,7 @@ The pending-suggestions badge is independent of Stage 2. Stage 2 cleans punctuat
 1. Open Vaakya and choose **start meeting notes**.
 2. Grant Microphone and Screen & System Audio Recording access. macOS may ask you to reopen Vaakya after the first Screen Recording grant.
 3. Keep your call in its normal app. Vaakya listens to your microphone and Mac audio without joining the meeting.
-4. Choose **stop and make notes**. Vaakya creates a local recording job, then runs transcription and speaker diarization after the meeting stops.
+4. Choose **stop and save**. Vaakya creates a local recording job, then runs the same Parakeet TDT v2 model as hotkey dictation, plus speaker diarization.
 
 There are no live partials and no meeting bot. The recording stays under Vaakya's Application Support directory and audio is never uploaded.
 
@@ -90,8 +90,10 @@ There are no live partials and no meeting bot. The recording stays under Vaakya'
 2. Wait until the job is **completed** (local Parakeet + diarization).
 3. Open the job: rename speakers, edit **Notes** and **Context**.
 4. In **Settings → Lenses (AI runners)**, keep the default **Local** runner or choose **Codex** or **Remote**. Enable **AI text egress** only for Codex or Remote.
-5. Run a lens (e.g. Technical interview notes). Confirm when prompted for B1 runners.
+5. Run a bundled lens or choose **New lens** to write your own prompt. Confirm when prompted for B1 runners.
 6. Review the draft; **Mark reviewed** / **Mark final** when you trust it.
+
+Custom lenses live under `~/Library/Application Support/Vaakya/custom-lenses/` as Markdown files. They use the same trust rules and egress confirmation as bundled lenses. Bundled ids cannot be overwritten.
 
 ### Archive Ask
 
@@ -131,7 +133,7 @@ Other useful commands:
 ```bash
 make package  # build dist/Vaakya-<version>-macOS.zip and .dmg
 make audit    # verify the bundle, entitlements, and privacy invariants
-make community-release VERSION=0.2.0  # test and package without an Apple account
+make community-release VERSION=0.3.0  # test and package without an Apple account
 ```
 
 Maintainers should follow [RELEASING.md](RELEASING.md).

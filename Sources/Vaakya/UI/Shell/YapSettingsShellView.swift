@@ -23,6 +23,8 @@ struct YapSettingsShellView: View {
     @State private var lensFilter = ""
     @State private var lensesTab: LensesTab = .installed
     @State private var bundledLenses: [LensSpec] = []
+    @State private var editorMode: CustomLensEditorSheet.Mode?
+    @State private var confirmDelete: LensSpec?
 
     private enum LensesTab: String {
         case installed
@@ -52,6 +54,37 @@ struct YapSettingsShellView: View {
             refreshCodex()
             bundledLenses = (try? env.lensService.availableLenses()) ?? []
         }
+        .sheet(item: $editorMode) { mode in
+            CustomLensEditorSheet(
+                mode: mode,
+                onSave: { id, title, body in
+                    try env.lensService.saveCustomLens(id: id, title: title, body: body)
+                },
+                onCancel: { editorMode = nil },
+                onSaved: { spec in
+                    refreshLenses()
+                    editorMode = nil
+                    message = ("Saved \(spec.title).", .success)
+                }
+            )
+        }
+        .confirmationDialog(
+            "Delete this lens?",
+            isPresented: Binding(
+                get: { confirmDelete != nil },
+                set: { if !$0 { confirmDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete lens", role: .destructive) {
+                if let confirmDelete {
+                    deleteCustom(confirmDelete)
+                }
+            }
+            Button("Cancel", role: .cancel) { confirmDelete = nil }
+        } message: {
+            Text("The prompt file is removed. Saved drafts on past recordings stay on disk.")
+        }
     }
 
     // MARK: - Main
@@ -67,13 +100,14 @@ struct YapSettingsShellView: View {
                 Spacer()
                 if router.settingsSection == .lenses {
                     Button {
-                        message = ("Custom lenses are planned — bundled set only for now.", .info)
+                        editorMode = .create
                     } label: {
                         Text("+ Create lens")
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
                             .foregroundStyle(Color.primary.opacity(0.75))
                     }
                     .buttonStyle(.plain)
+                    .help("Write a custom prompt that runs on completed transcripts")
                 }
             }
             .padding(.horizontal, 28)
@@ -216,10 +250,10 @@ struct YapSettingsShellView: View {
     private var recogniseSection: some View {
         settingsCard(title: "recognise") {
             capabilityBlock(
-                title: "Speech recognition",
-                license: "FluidAudio / Parakeet",
-                body: "Local Parakeet ASR on Apple Silicon. Audio stays on this Mac after the model download.",
-                detail: "On-device · consent-gated model download")
+                title: SpeechRecognitionProfile.shared.displayName,
+                license: "FluidAudio / Parakeet TDT v2",
+                body: SpeechRecognitionProfile.shared.summary,
+                detail: "Hotkey, start recording, and imported files · on-device")
             capabilityBlock(
                 title: "Speaker diarization",
                 license: "FluidAudio offline",
@@ -398,7 +432,7 @@ struct YapSettingsShellView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Discover")
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
-                    Text("A public lens catalog is not wired yet. Bundled lenses appear under Installed. You can author Markdown lenses into the app resources later.")
+                    Text("A public catalog is not wired yet. Create your own under Installed — they appear on every completed transcript.")
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -468,10 +502,10 @@ struct YapSettingsShellView: View {
                     Text(lensVersionLabel(lens))
                         .font(.system(size: 13))
                         .foregroundStyle(Color.primary.opacity(0.42))
-                    Text("by vaakya")
+                    Text(lens.isCustom ? "by you" : "by vaakya")
                         .font(.system(size: 13))
                         .foregroundStyle(Color.primary.opacity(0.42))
-                    Image(systemName: "checkmark.seal.fill")
+                    Image(systemName: lens.isCustom ? "pencil.circle.fill" : "checkmark.seal.fill")
                         .font(.system(size: 12))
                         .foregroundStyle(YapTheme.coral.opacity(0.85))
                 }
@@ -488,6 +522,11 @@ struct YapSettingsShellView: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(lens.id, forType: .string)
                     message = ("Copied \(lens.id)", .success)
+                }
+                if lens.isCustom {
+                    Divider()
+                    Button("Edit lens…") { editorMode = .edit(lens) }
+                    Button("Delete lens…", role: .destructive) { confirmDelete = lens }
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -586,6 +625,21 @@ struct YapSettingsShellView: View {
     }
 
     // MARK: - Actions
+
+    private func refreshLenses() {
+        bundledLenses = (try? env.lensService.availableLenses()) ?? []
+    }
+
+    private func deleteCustom(_ lens: LensSpec) {
+        do {
+            try env.lensService.deleteCustomLens(id: lens.id)
+            refreshLenses()
+            message = ("Deleted \(lens.title).", .success)
+        } catch {
+            message = (error.localizedDescription, .danger)
+        }
+        confirmDelete = nil
+    }
 
     private func refreshCodex() {
         codexFound = CodexLensClient.resolveCodexPath(

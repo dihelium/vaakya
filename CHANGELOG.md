@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- Meeting capture, imported audio, and hotkey dictation now share one Parakeet TDT v2 spine so Hindi, romanized Hinglish, and English use the same model.
+- Recording jobs store and display the ASR model that produced them.
+- Custom lenses can be created, edited, and deleted in Settings and from a completed transcript.
+
 ## 0.2.0
 
 - Added meeting capture, imported audio transcription, offline speaker diarization, transcript editing, lenses, and Archive Ask.

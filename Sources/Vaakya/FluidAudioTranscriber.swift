@@ -12,6 +12,7 @@ struct FileASRResult: Codable, Sendable {
 }
 
 protocol FileTranscriber: Sendable {
+    var modelID: String { get }
     func prepare() async throws
     func transcribeFile(_ url: URL, progressHandler: @escaping @Sendable (Double) -> Void) async throws -> FileASRResult
 }
@@ -19,6 +20,8 @@ protocol FileTranscriber: Sendable {
 /// Abstraction over the ASR backend so the rest of the app is insulated from
 /// FluidAudio's API (plan §10.6). All audio is 16 kHz mono Float32.
 protocol Transcriber: Sendable {
+    /// Stable id of the loaded Parakeet profile (must match FileTranscriber).
+    var modelID: String { get }
     /// True when the model is loaded and ready to transcribe.
     func isReady() async -> Bool
     /// Download (one-time, gated by consent) and load models. Idempotent.
@@ -30,6 +33,8 @@ protocol Transcriber: Sendable {
 }
 
 /// FluidAudio-backed transcriber: Parakeet TDT 0.6B v2 + Silero VAD (plan D5).
+/// Dictation, meeting capture, and imported audio all construct this with
+/// `SpeechRecognitionProfile.shared` so they cannot drift onto v3 or another model.
 /// Verified against FluidAudio 0.15.5 source:
 /// `AsrModels.downloadAndLoad(version: .v2)` → `AsrManager(config:models:)` +
 /// `loadModels(_:)` + `transcribe(_:decoderState:)`; `VadManager` + `process(_:)`.
@@ -43,12 +48,23 @@ final class FluidAudioTranscriber: Transcriber, FileTranscriber, @unchecked Send
         }
     }
 
+    let profile: SpeechRecognitionProfile
+    var modelID: String { profile.id }
+
     private let manager: AsrManager
     private var vad: VadManager?
     private var ready = false
 
-    init() {
+    init(profile: SpeechRecognitionProfile = .shared) {
+        self.profile = profile
         manager = AsrManager(config: .default)
+    }
+
+    private var asrVersion: AsrModelVersion {
+        switch profile.fluidAudioVersionName {
+        case "v3": return .v3
+        default: return .v2
+        }
     }
 
     func isReady() async -> Bool { ready }
@@ -56,7 +72,7 @@ final class FluidAudioTranscriber: Transcriber, FileTranscriber, @unchecked Send
     func prepare() async throws {
         guard !ready else { return }
         let models = try await AsrModels.downloadAndLoad(
-            version: .v2,
+            version: asrVersion,
             encoderPrecision: .int8,
             progressHandler: nil)
         try await manager.loadModels(models)

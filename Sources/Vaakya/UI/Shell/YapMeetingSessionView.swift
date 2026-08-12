@@ -1,4 +1,5 @@
 import SwiftUI
+import VaakyaCore
 
 /// Focused recording stage. Capture starts from home's "start recording" CTA.
 struct YapMeetingSessionView: View {
@@ -98,7 +99,7 @@ struct YapMeetingSessionView: View {
                 }
                 Text(controller.isPaused
                      ? "tap play to keep listening"
-                     : "meeting audio never leaves this Mac")
+                     : "same \(SpeechRecognitionProfile.shared.displayName) model as dictation · audio stays here")
                     .font(.system(size: 16))
                     .foregroundStyle(Color.primary.opacity(0.42))
             }

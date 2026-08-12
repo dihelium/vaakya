@@ -11,14 +11,14 @@ Users must manually approve the app once in **System Settings → Privacy & Secu
 Build the artifacts with:
 
 ```bash
-make community-release VERSION=0.2.0
+make community-release VERSION=0.3.0
 ```
 
 Successful output is written to `dist/`:
 
-- `Vaakya-0.2.0-macOS.dmg`
-- `Vaakya-0.2.0-macOS.zip`
-- `Vaakya-0.2.0-SHA256SUMS.txt`
+- `Vaakya-0.3.0-macOS.dmg`
+- `Vaakya-0.3.0-macOS.zip`
+- `Vaakya-0.3.0-SHA256SUMS.txt`
 
 Before publishing, inspect the artifacts and run the final checklist below. The community release script deliberately fails if the resulting app is not ad-hoc signed.
 
@@ -62,14 +62,14 @@ Run the test, build, audit, package, notarize, staple, and Gatekeeper checks wit
 ```bash
 VAAKYA_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 VAAKYA_NOTARY_PROFILE="vaakya-notary" \
-Scripts/release.sh 0.2.0
+Scripts/release.sh 0.3.0
 ```
 
 Successful output is written to `dist/`:
 
-- `Vaakya-0.2.0-macOS.dmg`
-- `Vaakya-0.2.0-macOS.zip`
-- `Vaakya-0.2.0-SHA256SUMS.txt`
+- `Vaakya-0.3.0-macOS.dmg`
+- `Vaakya-0.3.0-macOS.zip`
+- `Vaakya-0.3.0-SHA256SUMS.txt`
 
 ## Public repository boundary
 
@@ -91,12 +91,12 @@ If you do not want a personal email in public Git history, configure your GitHub
 From the development checkout:
 
 ```bash
-gh release create v0.2.0 \
-  dist/Vaakya-0.2.0-macOS.dmg \
-  dist/Vaakya-0.2.0-macOS.zip \
-  dist/Vaakya-0.2.0-SHA256SUMS.txt \
+gh release create v0.3.0 \
+  dist/Vaakya-0.3.0-macOS.dmg \
+  dist/Vaakya-0.3.0-macOS.zip \
+  dist/Vaakya-0.3.0-SHA256SUMS.txt \
   --repo OWNER/vaakya \
-  --title "Vaakya 0.2.0" \
+  --title "Vaakya 0.3.0" \
   --generate-notes
 ```
 

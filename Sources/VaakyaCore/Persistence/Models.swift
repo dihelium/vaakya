@@ -191,6 +191,8 @@ public struct TranscriptionJobRecord: Codable, Equatable, FetchableRecord, Mutab
     public var finalText: String?
     public var createdAt: String
     public var updatedAt: String
+    /// FluidAudio / Parakeet model id used for this job. Always the shared spine.
+    public var asrModel: String
 
     public init(id: String,
                 sourceName: String,
@@ -207,7 +209,8 @@ public struct TranscriptionJobRecord: Codable, Equatable, FetchableRecord, Mutab
                 rawText: String? = nil,
                 finalText: String? = nil,
                 createdAt: String,
-                updatedAt: String) {
+                updatedAt: String,
+                asrModel: String = SpeechRecognitionProfile.shared.id) {
         self.id = id
         self.sourceName = sourceName
         self.managedAudioPath = managedAudioPath
@@ -224,6 +227,7 @@ public struct TranscriptionJobRecord: Codable, Equatable, FetchableRecord, Mutab
         self.finalText = finalText
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.asrModel = asrModel
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -243,6 +247,7 @@ public struct TranscriptionJobRecord: Codable, Equatable, FetchableRecord, Mutab
         case finalText = "final_text"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case asrModel = "asr_model"
     }
 }
 

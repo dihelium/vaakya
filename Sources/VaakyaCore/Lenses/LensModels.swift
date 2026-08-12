@@ -11,6 +11,11 @@ public struct LensChatMessage: Codable, Equatable, Sendable {
     }
 }
 
+public enum LensOrigin: String, Equatable, Sendable {
+    case bundled
+    case custom
+}
+
 /// Parsed lens definition (Markdown file with YAML-like front matter).
 public struct LensSpec: Equatable, Sendable {
     public var id: String
@@ -21,6 +26,7 @@ public struct LensSpec: Equatable, Sendable {
     public var body: String
     /// Shared trust rules prepended into the system message when requiresLLM.
     public var systemTrust: String
+    public var origin: LensOrigin
 
     public init(id: String,
                 title: String,
@@ -28,7 +34,8 @@ public struct LensSpec: Equatable, Sendable {
                 minFidelity: String = "A1",
                 defaultEgress: String = "B1",
                 body: String,
-                systemTrust: String = "") {
+                systemTrust: String = "",
+                origin: LensOrigin = .bundled) {
         self.id = id
         self.title = title
         self.requiresLLM = requiresLLM
@@ -36,7 +43,10 @@ public struct LensSpec: Equatable, Sendable {
         self.defaultEgress = defaultEgress
         self.body = body
         self.systemTrust = systemTrust
+        self.origin = origin
     }
+
+    public var isCustom: Bool { origin == .custom }
 }
 
 /// Inputs for building a lens prompt (pure; no I/O).
@@ -159,10 +169,37 @@ public enum LensFrontMatter {
     }
 }
 
-public enum LensCatalogError: Error, Equatable, Sendable {
+public enum LensCatalogError: Error, Equatable, Sendable, LocalizedError {
     case missingSystemTrust
     case missingLens(String)
     case unclosedFrontMatter
     case invalidStatus(String)
     case emptyTranscript
+    case invalidLensID(String)
+    case reservedLensID(String)
+    case emptyTitle
+    case emptyBody
+
+    public var errorDescription: String? {
+        switch self {
+        case .missingSystemTrust:
+            return "The shared lens trust file is missing."
+        case .missingLens(let id):
+            return "No lens named \(id)."
+        case .unclosedFrontMatter:
+            return "This lens file has unclosed front matter."
+        case .invalidStatus(let status):
+            return "Invalid lens status: \(status)."
+        case .emptyTranscript:
+            return "The transcript is empty."
+        case .invalidLensID(let id):
+            return "Lens id “\(id)” must start with a letter and use only letters, numbers, and underscores."
+        case .reservedLensID(let id):
+            return "“\(id)” is a bundled lens and cannot be overwritten."
+        case .emptyTitle:
+            return "Give the lens a title."
+        case .emptyBody:
+            return "Write instructions for the lens."
+        }
+    }
 }

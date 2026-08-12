@@ -150,9 +150,9 @@ struct OnboardingView: View {
 
     private var modelSection: some View {
         VStack(alignment: .leading, spacing: VaakyaSpace.md) {
-            Text("Speech model")
+            Text("Speech model — one for everything")
                 .font(.headline)
-            Text("One-time ~450 MB download of Parakeet TDT 0.6B v2 (Core ML) from Hugging Face via FluidAudio. After that, recognition works fully offline.")
+            Text("One-time ~450 MB download of Parakeet TDT 0.6B v2 (Core ML) from Hugging Face via FluidAudio. Dictation, meeting recordings, and imported audio all use this same model. After that, recognition works fully offline.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Text("Optional Stage 2 cleanup (Settings) may use Apple Foundation Models / Private Cloud Compute — off until you enable it.")

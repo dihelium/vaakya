@@ -50,6 +50,8 @@ import Testing
         #expect(l5.requiresLLM)
         #expect(!l5.systemTrust.isEmpty)
         #expect(l5.body.contains("Technical interview notes"))
+        #expect(l5.origin == .bundled)
+        #expect(Set(LensCatalog.bundledIDs).isSubset(of: ids))
     }
 
     @Test func promoteStatusRewritesFrontMatter() throws {

@@ -187,6 +187,12 @@ public final class VaakyaDatabase: @unchecked Sendable {
                 CREATE INDEX ask_messages_conv_seq ON ask_messages(conversation_id, seq);
                 """)
         }
+        migrator.registerMigration("v6-shared-asr-model") { db in
+            try db.execute(sql: """
+                ALTER TABLE transcription_jobs
+                ADD COLUMN asr_model TEXT NOT NULL DEFAULT 'parakeet-tdt-0.6b-v2';
+                """)
+        }
         try migrator.migrate(queue)
     }
 

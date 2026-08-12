@@ -33,10 +33,20 @@ enum Paths {
         jobDirectory(jobID: jobID).appendingPathComponent("lenses", isDirectory: true)
     }
 
+    static var customLensesDirectory: URL {
+        appSupport.appendingPathComponent("custom-lenses", isDirectory: true)
+    }
+
     static func ensureAppSupport() throws {
         try FileManager.default.createDirectory(at: appSupport,
                                                 withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: transcriptionJobsDirectory,
+                                                withIntermediateDirectories: true)
+    }
+
+    static func ensureCustomLensesDirectory() throws {
+        try ensureAppSupport()
+        try FileManager.default.createDirectory(at: customLensesDirectory,
                                                 withIntermediateDirectories: true)
     }
 
